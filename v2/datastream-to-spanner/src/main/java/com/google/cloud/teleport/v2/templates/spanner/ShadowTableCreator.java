@@ -15,6 +15,7 @@
  */
 package com.google.cloud.teleport.v2.templates.spanner;
 
+import com.google.cloud.spanner.Dialect;
 import com.google.cloud.teleport.v2.templates.datastream.DatastreamConstants;
 import com.google.cloud.teleport.v2.templates.spanner.ddl.Column;
 import com.google.cloud.teleport.v2.templates.spanner.ddl.Ddl;
@@ -54,10 +55,10 @@ class ShadowTableCreator {
    * Note: Shadow tables for interleaved tables are not interleaved to
    * their shadow parent table.
    */
-  Table constructShadowTable(Ddl informationSchema, String dataTableName) {
+  Table constructShadowTable(Ddl informationSchema, String dataTableName, Dialect dialect) {
 
     // Create a new shadow table with the given prefix.
-    Table.Builder shadowTableBuilder = Table.builder();
+    Table.Builder shadowTableBuilder = Table.builder(dialect);
     String shadowTableName = shadowTablePrefix + dataTableName;
     shadowTableBuilder.name(shadowTableName);
 

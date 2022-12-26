@@ -16,6 +16,7 @@
 package com.google.cloud.teleport.v2.templates.spanner.ddl;
 
 import com.google.auto.value.AutoValue;
+import com.google.cloud.spanner.Dialect;
 import com.google.common.collect.ImmutableList;
 import java.io.IOException;
 import java.io.Serializable;
@@ -30,8 +31,14 @@ public abstract class IndexColumn implements Serializable {
 
   public abstract Order order();
 
+  public abstract Dialect dialect();
+
+  public static IndexColumn create(String name, Order order, Dialect dialect) {
+    return new AutoValue_IndexColumn.Builder().dialect(dialect).name(name).order(order).autoBuild();
+  }
+
   public static IndexColumn create(String name, Order order) {
-    return new AutoValue_IndexColumn(name, order);
+    return create(name, order, Dialect.GOOGLE_STANDARD_SQL);
   }
 
   /** Ordering of column in the index. */
@@ -52,7 +59,12 @@ public abstract class IndexColumn implements Serializable {
   }
 
   public void prettyPrint(Appendable appendable) throws IOException {
-    appendable.append("`").append(name()).append("` ").append(order().title);
+    String identifierQuote = DdlUtilityComponents.identifierQuote(dialect());
+    appendable
+            .append(identifierQuote)
+            .append(name())
+            .append(identifierQuote + " ")
+            .append(order().title);
   }
 
   public String prettyPrint() {
@@ -70,18 +82,34 @@ public abstract class IndexColumn implements Serializable {
     return prettyPrint();
   }
 
+  @AutoValue.Builder
+  public abstract static class Builder {
+
+    abstract Builder name(String name);
+
+    abstract Builder order(Order order);
+
+    abstract Builder dialect(Dialect dialect);
+
+    abstract IndexColumn autoBuild();
+  }
+
   /** A builder for {@link IndexColumn}. */
   public static class IndexColumnsBuilder<T> {
     private ImmutableList.Builder<IndexColumn> columns = ImmutableList.builder();
 
+    private Builder indexColumnBuilder;
     private T callback;
 
-    public IndexColumnsBuilder(T callback) {
+    private Dialect dialect;
+
+    public IndexColumnsBuilder(T callback, Dialect dialect) {
       this.callback = callback;
+      this.dialect = dialect;
     }
 
     public IndexColumnsBuilder<T> asc(String name) {
-      IndexColumn indexColumn = IndexColumn.create(name, Order.ASC);
+      IndexColumn indexColumn = IndexColumn.create(name, Order.ASC, dialect);
       return set(indexColumn);
     }
 
@@ -91,11 +119,16 @@ public abstract class IndexColumn implements Serializable {
     }
 
     public IndexColumnsBuilder<T> desc(String name) {
-      return set(IndexColumn.create(name, Order.DESC));
+      return set(IndexColumn.create(name, Order.DESC, dialect));
     }
 
     public IndexColumnsBuilder<T> storing(String name) {
-      return set(IndexColumn.create(name, Order.STORING));
+      return set(IndexColumn.create(name, Order.STORING, dialect));
+    }
+
+    public IndexColumnsBuilder<T> create() {
+      indexColumnBuilder = new AutoValue_IndexColumn.Builder().dialect(dialect);
+      return this;
     }
 
     public ImmutableList<IndexColumn> build() {

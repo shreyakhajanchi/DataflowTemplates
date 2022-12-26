@@ -16,10 +16,7 @@
 package com.google.cloud.teleport.v2.templates.spanner;
 
 import com.google.api.gax.longrunning.OperationFuture;
-import com.google.cloud.spanner.BatchClient;
-import com.google.cloud.spanner.BatchReadOnlyTransaction;
-import com.google.cloud.spanner.DatabaseAdminClient;
-import com.google.cloud.spanner.TimestampBound;
+import com.google.cloud.spanner.*;
 import com.google.cloud.teleport.v2.templates.spanner.ddl.Ddl;
 import com.google.cloud.teleport.v2.templates.spanner.ddl.InformationSchemaScanner;
 import com.google.cloud.teleport.v2.templates.spanner.ddl.Table;
@@ -109,29 +106,32 @@ public class ProcessInformationSchema extends PTransform<PBegin, PCollection<Ddl
 
     @ProcessElement
     public void processElement(ProcessContext c) {
+      DatabaseAdminClient databaseAdminClient = spannerAccessor.getDatabaseAdminClient();
+      Dialect dialect = databaseAdminClient.getDatabase(spannerConfig.getInstanceId().get(),
+              spannerConfig.getDatabaseId().get()).getDialect();
       if (shouldCreateShadowTables) {
-        createShadowTablesInSpanner(getInformationSchemaAsDdl());
+        createShadowTablesInSpanner(getInformationSchemaAsDdl(dialect), dialect);
       }
-      c.output(getInformationSchemaAsDdl());
+      c.output(getInformationSchemaAsDdl(dialect));
     }
 
-    Ddl getInformationSchemaAsDdl() {
+    Ddl getInformationSchemaAsDdl(Dialect dialect) {
       BatchClient batchClient = spannerAccessor.getBatchClient();
       BatchReadOnlyTransaction context =
           batchClient.batchReadOnlyTransaction(TimestampBound.strong());
-      InformationSchemaScanner scanner = new InformationSchemaScanner(context);
+      InformationSchemaScanner scanner = new InformationSchemaScanner(context, dialect);
       return scanner.scan();
     }
 
-    void createShadowTablesInSpanner(Ddl informationSchema) {
+    void createShadowTablesInSpanner(Ddl informationSchema, Dialect dialect) {
       List<String> dataTablesWithoutShadowTables =
           getDataTablesWithNoShadowTables(informationSchema);
 
-      Ddl.Builder shadowTableBuilder = Ddl.builder();
+      Ddl.Builder shadowTableBuilder = Ddl.builder(dialect);
       ShadowTableCreator shadowTableCreator = new ShadowTableCreator(sourceType, shadowTablePrefix);
       for (String dataTableName : dataTablesWithoutShadowTables) {
         Table shadowTable =
-            shadowTableCreator.constructShadowTable(informationSchema, dataTableName);
+            shadowTableCreator.constructShadowTable(informationSchema, dataTableName, dialect);
         shadowTableBuilder.addTable(shadowTable);
       }
       List<String> createShadowTableStatements = shadowTableBuilder.build().createTableStatements();

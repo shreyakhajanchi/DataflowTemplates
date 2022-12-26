@@ -19,6 +19,7 @@ import static org.hamcrest.CoreMatchers.is;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertEquals;
 
+import com.google.cloud.spanner.Dialect;
 import com.google.cloud.teleport.v2.templates.spanner.ddl.Ddl;
 import com.google.cloud.teleport.v2.templates.spanner.ddl.Table;
 import java.util.Set;
@@ -33,7 +34,7 @@ public class ShadowTableCreatorTest {
     Ddl testDdl = ProcessInformationSchemaTest.getTestDdl();
 
     ShadowTableCreator shadowTableCreator = new ShadowTableCreator("oracle", "shadow_");
-    Table shadowTable = shadowTableCreator.constructShadowTable(testDdl, "Users_interleaved");
+    Table shadowTable = shadowTableCreator.constructShadowTable(testDdl, "Users_interleaved", Dialect.GOOGLE_STANDARD_SQL);
 
     /* Verify
      * (1) name of shadow table
@@ -58,7 +59,7 @@ public class ShadowTableCreatorTest {
     Ddl testDdl = ProcessInformationSchemaTest.getTestDdl();
 
     ShadowTableCreator shadowTableCreator = new ShadowTableCreator("mysql", "shadow_");
-    Table shadowTable = shadowTableCreator.constructShadowTable(testDdl, "Users_interleaved");
+    Table shadowTable = shadowTableCreator.constructShadowTable(testDdl, "Users_interleaved", Dialect.GOOGLE_STANDARD_SQL);
 
     /* Verify
      * (1) name of shadow table
@@ -84,7 +85,7 @@ public class ShadowTableCreatorTest {
     Ddl testDdl = ProcessInformationSchemaTest.getTestDdl();
 
     ShadowTableCreator shadowTableCreator = new ShadowTableCreator("postgresql", "shadow_");
-    Table shadowTable = shadowTableCreator.constructShadowTable(testDdl, "Users_interleaved");
+    Table shadowTable = shadowTableCreator.constructShadowTable(testDdl, "Users_interleaved", Dialect.GOOGLE_STANDARD_SQL);
 
     /* Verify
      * (1) name of shadow table
