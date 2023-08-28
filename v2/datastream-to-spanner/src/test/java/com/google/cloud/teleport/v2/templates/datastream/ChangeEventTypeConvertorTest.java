@@ -628,7 +628,7 @@ public final class ChangeEventTypeConvertorTest {
     JSONObject changeEvent = new JSONObject();
     JsonNode ce = getJsonNode(changeEvent.toString());
     assertEquals(
-            ChangeEventTypeConvertor.toTimestamp(ce, "field1", /* requiredField= */ true),
-            Timestamp.parseTimestamp("2020-12-30T12:12:12.123Z"));
+            ChangeEventTypeConvertor.toDate(ce, "field1", /* requiredField= */ true),
+            Date.parseDate("2020-12-30"));
   }
 }
