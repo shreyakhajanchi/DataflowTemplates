@@ -195,6 +195,10 @@ public class ChangeEventTypeConvertor {
       JsonNode changeEvent, String key, boolean requiredField)
       throws ChangeEventConvertorException {
 
+    if (!containsValue(changeEvent, key, requiredField)) {
+      return null;
+    }
+
     String value = toString(changeEvent, key, requiredField);
     if (NumberUtils.isCreatable(value) || NumberUtils.isParsable(value) || isNumeric(value)) {
       return new BigDecimal(value).setScale(9, RoundingMode.HALF_UP);
