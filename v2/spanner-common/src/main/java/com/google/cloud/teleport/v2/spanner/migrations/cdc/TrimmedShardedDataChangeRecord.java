@@ -13,7 +13,7 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.cloud.teleport.v2.templates.common;
+package com.google.cloud.teleport.v2.spanner.migrations.cdc;
 
 import com.google.cloud.Timestamp;
 import java.io.Serializable;

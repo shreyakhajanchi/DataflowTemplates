@@ -16,7 +16,7 @@
 package com.google.cloud.teleport.v2.templates.transforms;
 
 import com.google.cloud.Timestamp;
-import com.google.cloud.teleport.v2.templates.common.TrimmedShardedDataChangeRecord;
+import com.google.cloud.teleport.v2.spanner.migrations.cdc.TrimmedShardedDataChangeRecord;
 import java.util.Arrays;
 import java.util.Collections;
 import org.apache.beam.sdk.coders.SerializableCoder;

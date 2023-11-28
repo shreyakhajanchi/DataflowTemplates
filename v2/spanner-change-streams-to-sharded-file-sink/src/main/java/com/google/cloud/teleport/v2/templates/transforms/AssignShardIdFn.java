@@ -24,12 +24,11 @@ import com.google.cloud.teleport.v2.spanner.ddl.Column;
 import com.google.cloud.teleport.v2.spanner.ddl.Ddl;
 import com.google.cloud.teleport.v2.spanner.ddl.IndexColumn;
 import com.google.cloud.teleport.v2.spanner.ddl.Table;
+import com.google.cloud.teleport.v2.spanner.migrations.cdc.TrimmedShardedDataChangeRecord;
 import com.google.cloud.teleport.v2.spanner.migrations.schema.Schema;
 import com.google.cloud.teleport.v2.spanner.migrations.schema.SpannerTable;
 import com.google.cloud.teleport.v2.spanner.type.Type;
 import com.google.cloud.teleport.v2.templates.changestream.DataChangeRecordTypeConvertor;
-import com.google.cloud.teleport.v2.templates.common.TrimmedShardedDataChangeRecord;
-import com.google.cloud.teleport.v2.templates.constants.Constants;
 import com.google.common.collect.ImmutableList;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -38,8 +37,6 @@ import org.apache.beam.sdk.io.gcp.spanner.SpannerAccessor;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
 import org.apache.beam.sdk.io.gcp.spanner.changestreams.model.ModType;
 import org.apache.beam.sdk.transforms.DoFn;
-import org.apache.beam.sdk.transforms.DoFn.ProcessContext;
-import org.apache.beam.sdk.transforms.DoFn.ProcessElement;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -61,25 +58,10 @@ public class AssignShardIdFn
   // Jackson Object mapper.
   private transient ObjectMapper mapper;
 
-  private final String shardingMode;
-
-  private final String shardName;
-
-  private final String skipDirName;
-
-  public AssignShardIdFn(
-      SpannerConfig spannerConfig,
-      Schema schema,
-      Ddl ddl,
-      String shardingMode,
-      String shardName,
-      String skipDirName) {
+  public AssignShardIdFn(SpannerConfig spannerConfig, Schema schema, Ddl ddl) {
     this.spannerConfig = spannerConfig;
     this.schema = schema;
     this.ddl = ddl;
-    this.shardingMode = shardingMode;
-    this.shardName = shardName;
-    this.skipDirName = skipDirName;
   }
 
   /** Setup function connects to Cloud Spanner. */
@@ -105,23 +87,7 @@ public class AssignShardIdFn
     TrimmedShardedDataChangeRecord record = new TrimmedShardedDataChangeRecord(c.element());
 
     try {
-      if (shardingMode.equals(Constants.SHARDING_MODE_SINGLE_SHARD)) {
-        record.setShard(shardName);
-        c.output(record);
-        return;
-      }
       String shardIdColumn = getShardIdColumnForTableName(record.getTableName());
-
-      if (shardIdColumn.isEmpty()) {
-        LOG.warn(
-            "Writing record {} to skipped directory name {} since table not present in the session"
-                + " file.",
-            record,
-            skipDirName);
-        record.setShard(skipDirName);
-        c.output(record);
-        return;
-      }
 
       String keysJsonStr = record.getMods().get(0).getKeysJson();
       JsonNode keysJson = mapper.readTree(keysJsonStr);
@@ -160,15 +126,13 @@ public class AssignShardIdFn
 
   private String getShardIdColumnForTableName(String tableName) throws IllegalArgumentException {
     if (!schema.getSpannerToID().containsKey(tableName)) {
-      LOG.warn(
-          "Table {} found in change record but not found in session file. Skipping record",
-          tableName);
-      return "";
+      throw new IllegalArgumentException(
+          "Table " + tableName + " found in change record but not found in session file.");
     }
     String tableId = schema.getSpannerToID().get(tableName).getName();
     if (!schema.getSpSchema().containsKey(tableId)) {
-      LOG.warn("Table {} not found in session file. Skipping record.", tableId);
-      return "";
+      throw new IllegalArgumentException(
+          "Table " + tableId + " not found in session file. Please provide a valid session file.");
     }
     SpannerTable spTable = schema.getSpSchema().get(tableId);
     String shardColId = spTable.getShardIdColumn();

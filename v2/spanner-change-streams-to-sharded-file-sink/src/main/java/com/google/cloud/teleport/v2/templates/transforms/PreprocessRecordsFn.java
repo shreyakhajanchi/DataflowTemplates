@@ -15,13 +15,11 @@
  */
 package com.google.cloud.teleport.v2.templates.transforms;
 
-import com.google.cloud.teleport.v2.templates.common.TrimmedShardedDataChangeRecord;
+import com.google.cloud.teleport.v2.spanner.migrations.cdc.TrimmedShardedDataChangeRecord;
 import java.util.Collections;
 import org.apache.beam.sdk.io.gcp.spanner.changestreams.model.DataChangeRecord;
 import org.apache.beam.sdk.io.gcp.spanner.changestreams.model.Mod;
 import org.apache.beam.sdk.transforms.DoFn;
-import org.apache.beam.sdk.transforms.DoFn.ProcessContext;
-import org.apache.beam.sdk.transforms.DoFn.ProcessElement;
 
 /** This DoFn does miscellaneous minor transformations before processing. */
 public class PreprocessRecordsFn extends DoFn<DataChangeRecord, TrimmedShardedDataChangeRecord> {
