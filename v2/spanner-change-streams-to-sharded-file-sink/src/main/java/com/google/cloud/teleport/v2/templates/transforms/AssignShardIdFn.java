@@ -16,33 +16,41 @@
 package com.google.cloud.teleport.v2.templates.transforms;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.cloud.spanner.Struct;
-import com.google.cloud.spanner.TimestampBound;
-import com.google.cloud.teleport.v2.spanner.ddl.Column;
 import com.google.cloud.teleport.v2.spanner.ddl.Ddl;
-import com.google.cloud.teleport.v2.spanner.ddl.IndexColumn;
-import com.google.cloud.teleport.v2.spanner.ddl.Table;
 import com.google.cloud.teleport.v2.spanner.migrations.cdc.TrimmedShardedDataChangeRecord;
 import com.google.cloud.teleport.v2.spanner.migrations.schema.Schema;
-import com.google.cloud.teleport.v2.spanner.migrations.schema.SpannerTable;
-import com.google.cloud.teleport.v2.spanner.type.Type;
-import com.google.cloud.teleport.v2.templates.changestream.DataChangeRecordTypeConvertor;
-import com.google.common.collect.ImmutableList;
+import com.google.cloud.teleport.v2.spanner.migrations.utils.IShardIdFetcher;
+import com.google.cloud.teleport.v2.templates.utils.ShardIdFetcherImpl;
+import java.io.File;
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.util.Arrays;
+import java.lang.reflect.Constructor;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.channels.WritableByteChannel;
+import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
+import org.apache.beam.sdk.io.FileSystems;
+import org.apache.beam.sdk.io.fs.ResourceId;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerAccessor;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
-import org.apache.beam.sdk.io.gcp.spanner.changestreams.model.ModType;
 import org.apache.beam.sdk.transforms.DoFn;
+import org.apache.beam.sdk.transforms.DoFn.ProcessContext;
+import org.apache.beam.sdk.transforms.DoFn.ProcessElement;
+import org.apache.beam.sdk.util.MimeTypes;
+import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.base.Splitter;
+import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.io.ByteStreams;
+import org.apache.beam.vendor.guava.v32_1_2_jre.com.google.common.io.Files;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /** This DoFn assigns the shardId as key to the record. */
 public class AssignShardIdFn
-    extends DoFn<TrimmedShardedDataChangeRecord, TrimmedShardedDataChangeRecord> {
+        extends DoFn<TrimmedShardedDataChangeRecord, TrimmedShardedDataChangeRecord> {
   private static final Logger LOG = LoggerFactory.getLogger(AssignShardIdFn.class);
 
   private final SpannerConfig spannerConfig;
@@ -58,10 +66,31 @@ public class AssignShardIdFn
   // Jackson Object mapper.
   private transient ObjectMapper mapper;
 
-  public AssignShardIdFn(SpannerConfig spannerConfig, Schema schema, Ddl ddl) {
+  private final String shardingMode;
+
+  private final String shardName;
+
+  private final String customJarPath;
+
+  private final String shardingCustomClassName;
+
+  private IShardIdFetcher shardIdFetcher;
+
+  public AssignShardIdFn(
+          SpannerConfig spannerConfig,
+          Schema schema,
+          Ddl ddl,
+          String shardingMode,
+          String shardName,
+          String customJarPath,
+          String shardingCustomClassName) {
     this.spannerConfig = spannerConfig;
     this.schema = schema;
     this.ddl = ddl;
+    this.shardingMode = shardingMode;
+    this.shardName = shardName;
+    this.customJarPath = customJarPath;
+    this.shardingCustomClassName = shardingCustomClassName;
   }
 
   /** Setup function connects to Cloud Spanner. */
@@ -72,6 +101,16 @@ public class AssignShardIdFn
     }
     mapper = new ObjectMapper();
     mapper.enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS);
+    shardIdFetcher =
+            getShardIdFetcherImpl(
+                    spannerAccessor,
+                    schema,
+                    shardName,
+                    ddl,
+                    mapper,
+                    shardingMode,
+                    customJarPath,
+                    shardingCustomClassName);
   }
 
   /** Teardown function disconnects from the Cloud Spanner. */
@@ -87,35 +126,9 @@ public class AssignShardIdFn
     TrimmedShardedDataChangeRecord record = new TrimmedShardedDataChangeRecord(c.element());
 
     try {
-      String shardIdColumn = getShardIdColumnForTableName(record.getTableName());
-
-      String keysJsonStr = record.getMods().get(0).getKeysJson();
-      JsonNode keysJson = mapper.readTree(keysJsonStr);
-
-      String newValueJsonStr = record.getMods().get(0).getNewValuesJson();
-      JsonNode newValueJson = mapper.readTree(newValueJsonStr);
-
-      if (keysJson.has(shardIdColumn)) {
-        String shardId = keysJson.get(shardIdColumn).asText();
-        record.setShard(shardId);
-        c.output(record);
-      } else if (newValueJson.has(shardIdColumn)) {
-        String shardId = newValueJson.get(shardIdColumn).asText();
-        record.setShard(shardId);
-        c.output(record);
-      } else if (record.getModType() == ModType.DELETE) {
-        String shardId =
-            fetchShardId(
-                record.getTableName(), record.getCommitTimestamp(), shardIdColumn, keysJson);
-        record.setShard(shardId);
-        c.output(record);
-      } else {
-        LOG.error("Cannot find entry for the shard id column '" + shardIdColumn + "' in record.");
-        return;
-      }
-    } catch (IllegalArgumentException e) {
-      LOG.error("Error fetching shard Id column for table: " + e.getMessage());
-      return;
+      String shardId = shardIdFetcher.getShardId(record);
+      record.setShard(shardId);
+      c.output(record);
     } catch (Exception e) {
       StringWriter errors = new StringWriter();
       e.printStackTrace(new PrintWriter(errors));
@@ -124,123 +137,77 @@ public class AssignShardIdFn
     }
   }
 
-  private String getShardIdColumnForTableName(String tableName) throws IllegalArgumentException {
-    if (!schema.getSpannerToID().containsKey(tableName)) {
-      throw new IllegalArgumentException(
-          "Table " + tableName + " found in change record but not found in session file.");
-    }
-    String tableId = schema.getSpannerToID().get(tableName).getName();
-    if (!schema.getSpSchema().containsKey(tableId)) {
-      throw new IllegalArgumentException(
-          "Table " + tableId + " not found in session file. Please provide a valid session file.");
-    }
-    SpannerTable spTable = schema.getSpSchema().get(tableId);
-    String shardColId = spTable.getShardIdColumn();
-    if (!spTable.getColDefs().containsKey(shardColId)) {
-      throw new IllegalArgumentException(
-          "ColumnId "
-              + shardColId
-              + " not found in session file. Please provide a valid session file.");
-    }
-    return spTable.getColDefs().get(shardColId).getName();
-  }
+  private IShardIdFetcher getShardIdFetcherImpl(
+          SpannerAccessor spannerAccessor,
+          Schema schema,
+          String shardName,
+          Ddl ddl,
+          ObjectMapper mapper,
+          String shardingMode,
+          String customJarPath,
+          String shardingCustomClassName) {
+    if (!customJarPath.isEmpty() && !shardingCustomClassName.isEmpty()) {
+      LOG.info(
+              "Getting custom sharding fetcher : "
+                      + customJarPath
+                      + " with class: "
+                      + shardingCustomClassName);
+      try {
 
-  // Perform a stale read on spanner to fetch shardId.
-  private String fetchShardId(
-      String tableName,
-      com.google.cloud.Timestamp commitTimestamp,
-      String shardIdColName,
-      JsonNode keysJson)
-      throws Exception {
-    com.google.cloud.Timestamp staleReadTs =
-        com.google.cloud.Timestamp.ofTimeSecondsAndNanos(
-            commitTimestamp.getSeconds() - 1, commitTimestamp.getNanos());
-    Struct row =
-        spannerAccessor
-            .getDatabaseClient()
-            .singleUse(TimestampBound.ofReadTimestamp(staleReadTs))
-            .readRow(tableName, generateKey(tableName, keysJson), Arrays.asList(shardIdColName));
-    if (row == null) {
-      throw new Exception("stale read on Spanner returned null");
-    }
-    return row.getString(0);
-  }
+        // Getting the jar URL which contains target class
+        URL[] classLoaderUrls = saveFilesLocally(customJarPath);
 
-  private com.google.cloud.spanner.Key generateKey(String tableName, JsonNode keysJson)
-      throws Exception {
-    try {
-      Table table = ddl.table(tableName);
-      ImmutableList<IndexColumn> keyColumns = table.primaryKeys();
-      com.google.cloud.spanner.Key.Builder pk = com.google.cloud.spanner.Key.newBuilder();
+        // Create a new URLClassLoader
+        URLClassLoader urlClassLoader = new URLClassLoader(classLoaderUrls);
 
-      for (IndexColumn keyColumn : keyColumns) {
-        Column key = table.column(keyColumn.name());
-        Type keyColType = key.type();
-        String keyColName = key.name();
-        switch (keyColType.getCode()) {
-          case BOOL:
-          case PG_BOOL:
-            pk.append(
-                DataChangeRecordTypeConvertor.toBoolean(
-                    keysJson, keyColName, /* requiredField= */ true));
-            break;
-          case INT64:
-          case PG_INT8:
-            pk.append(
-                DataChangeRecordTypeConvertor.toLong(
-                    keysJson, keyColName, /* requiredField= */ true));
-            break;
-          case FLOAT64:
-          case PG_FLOAT8:
-            pk.append(
-                DataChangeRecordTypeConvertor.toDouble(
-                    keysJson, keyColName, /* requiredField= */ true));
-            break;
-          case STRING:
-          case PG_VARCHAR:
-          case PG_TEXT:
-            pk.append(
-                DataChangeRecordTypeConvertor.toString(
-                    keysJson, keyColName, /* requiredField= */ true));
-            break;
-          case NUMERIC:
-          case PG_NUMERIC:
-            pk.append(
-                DataChangeRecordTypeConvertor.toNumericBigDecimal(
-                    keysJson, keyColName, /* requiredField= */ true));
-            break;
-          case JSON:
-          case PG_JSONB:
-            pk.append(
-                DataChangeRecordTypeConvertor.toString(
-                    keysJson, keyColName, /* requiredField= */ true));
-            break;
-          case BYTES:
-          case PG_BYTEA:
-            pk.append(
-                DataChangeRecordTypeConvertor.toByteArray(
-                    keysJson, keyColName, /* requiredField= */ true));
-            break;
-          case TIMESTAMP:
-          case PG_TIMESTAMPTZ:
-            pk.append(
-                DataChangeRecordTypeConvertor.toTimestamp(
-                    keysJson, keyColName, /* requiredField= */ true));
-            break;
-          case DATE:
-          case PG_DATE:
-            pk.append(
-                DataChangeRecordTypeConvertor.toDate(
-                    keysJson, keyColName, /* requiredField= */ true));
-            break;
-          default:
-            throw new IllegalArgumentException(
-                "Column name(" + keyColName + ") has unsupported column type(" + keyColType + ")");
-        }
+        // Load the target class
+        Class<?> shardFetcherClass = urlClassLoader.loadClass(shardingCustomClassName);
+
+        // Create a new instance from the loaded class
+        Constructor<?> constructor = shardFetcherClass.getConstructor();
+        IShardIdFetcher shardFetcher = (IShardIdFetcher) constructor.newInstance();
+
+        shardFetcher.init(spannerAccessor, schema, ddl, mapper, shardName, shardingMode);
+        return shardFetcher;
+      } catch (Exception e) {
+        throw new RuntimeException("Error loading custom class : " + e.getMessage());
       }
-      return pk.build();
-    } catch (Exception e) {
-      throw new Exception("Error generating key: " + e.getMessage());
+    }
+    // else return the core implementation
+    ShardIdFetcherImpl shardIdFetcher = new ShardIdFetcherImpl();
+    shardIdFetcher.init(spannerAccessor, schema, ddl, mapper, shardName, shardingMode);
+    return shardIdFetcher;
+  }
+
+  private URL[] saveFilesLocally(String driverJars) {
+    List<String> listOfJarPaths = Splitter.on(',').trimResults().splitToList(driverJars);
+
+    final String destRoot = Files.createTempDir().getAbsolutePath();
+    List<URL> driverJarUrls = new ArrayList<>();
+    listOfJarPaths.stream()
+            .forEach(
+                    jarPath -> {
+                      try {
+                        ResourceId sourceResourceId = FileSystems.matchNewResource(jarPath, false);
+                        @SuppressWarnings("nullness")
+                        File destFile = Paths.get(destRoot, sourceResourceId.getFilename()).toFile();
+                        ResourceId destResourceId =
+                                FileSystems.matchNewResource(destFile.getAbsolutePath(), false);
+                        copy(sourceResourceId, destResourceId);
+                        LOG.info("Localized jar: " + sourceResourceId + " to: " + destResourceId);
+                        driverJarUrls.add(destFile.toURI().toURL());
+                      } catch (IOException e) {
+                        LOG.warn("Unable to copy " + jarPath, e);
+                      }
+                    });
+    return driverJarUrls.stream().toArray(URL[]::new);
+  }
+
+  private void copy(ResourceId source, ResourceId dest) throws IOException {
+    try (ReadableByteChannel rbc = FileSystems.open(source)) {
+      try (WritableByteChannel wbc = FileSystems.create(dest, MimeTypes.BINARY)) {
+        ByteStreams.copy(rbc, wbc);
+      }
     }
   }
 }

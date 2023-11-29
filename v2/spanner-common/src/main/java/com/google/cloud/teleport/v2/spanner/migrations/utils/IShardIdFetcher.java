@@ -24,13 +24,13 @@ import org.apache.beam.sdk.io.gcp.spanner.SpannerAccessor;
 
 public interface IShardIdFetcher {
 
-    void init(
-            SpannerAccessor spannerAccessor,
-            Schema schema,
-            Ddl ddl,
-            ObjectMapper mapper,
-            String shardName,
-            String shardingMode);
+  void init(
+      SpannerAccessor spannerAccessor,
+      Schema schema,
+      Ddl ddl,
+      ObjectMapper mapper,
+      String shardName,
+      String shardingMode);
 
-    String getShardId(TrimmedShardedDataChangeRecord record);
+  String getShardId(TrimmedShardedDataChangeRecord record);
 }

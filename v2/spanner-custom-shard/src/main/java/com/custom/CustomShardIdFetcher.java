@@ -24,29 +24,25 @@ import org.apache.beam.sdk.io.gcp.spanner.SpannerAccessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Custom shard id function.
- */
+/** Custom shard id function. */
 public class CustomShardIdFetcher implements IShardIdFetcher {
 
-    private static final Logger LOG = LoggerFactory.getLogger(CustomShardIdFetcher.class);
+  private static final Logger LOG = LoggerFactory.getLogger(CustomShardIdFetcher.class);
 
-    public CustomShardIdFetcher() {
-    }
+  public CustomShardIdFetcher() {}
 
-    @Override
-    public void init(
-            SpannerAccessor spannerAccessor,
-            Schema schema,
-            Ddl ddl,
-            ObjectMapper mapper,
-            String shardName,
-            String shardingMode) {
-    }
+  @Override
+  public void init(
+      SpannerAccessor spannerAccessor,
+      Schema schema,
+      Ddl ddl,
+      ObjectMapper mapper,
+      String shardName,
+      String shardingMode) {}
 
-    @Override
-    public String getShardId(TrimmedShardedDataChangeRecord record) {
-        LOG.info("Returning custom sharding function");
-        return "xyz";
-    }
+  @Override
+  public String getShardId(TrimmedShardedDataChangeRecord record) {
+    LOG.info("Returning custom sharding function");
+    return "xyz";
+  }
 }

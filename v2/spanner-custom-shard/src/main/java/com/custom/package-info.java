@@ -1,4 +1,3 @@
-
 /*
  * Copyright (C) 2023 Google Inc.
  *
@@ -14,7 +13,5 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-/**
- * Implements custom sharding function.
- */
+/** Implements custom sharding function. */
 package com.custom;
