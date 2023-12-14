@@ -15,13 +15,11 @@
  */
 package com.google.cloud.teleport.v2.templates.transforms;
 
-import com.google.cloud.teleport.v2.templates.common.TrimmedShardedDataChangeRecord;
+import com.google.cloud.teleport.v2.spanner.migrations.cdc.TrimmedShardedDataChangeRecord;
 import com.google.cloud.teleport.v2.templates.utils.DataSeenTracker;
 import java.util.HashSet;
 import java.util.Set;
 import org.apache.beam.sdk.transforms.DoFn;
-import org.apache.beam.sdk.transforms.DoFn.ProcessContext;
-import org.apache.beam.sdk.transforms.DoFn.ProcessElement;
 import org.apache.beam.sdk.transforms.windowing.BoundedWindow;
 import org.apache.beam.sdk.transforms.windowing.IntervalWindow;
 import org.slf4j.Logger;

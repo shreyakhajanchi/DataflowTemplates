@@ -16,21 +16,9 @@
 package com.google.cloud.teleport.v2.spanner.migrations.utils;
 
 /** The interface to get the shard identifier. */
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.cloud.teleport.v2.spanner.ddl.Ddl;
-import com.google.cloud.teleport.v2.spanner.migrations.cdc.TrimmedShardedDataChangeRecord;
-import com.google.cloud.teleport.v2.spanner.migrations.schema.Schema;
-import org.apache.beam.sdk.io.gcp.spanner.SpannerAccessor;
+import org.json.JSONObject;
 
 public interface IShardIdFetcher {
 
-  void init(
-      SpannerAccessor spannerAccessor,
-      Schema schema,
-      Ddl ddl,
-      ObjectMapper mapper,
-      String shardName,
-      String shardingMode);
-
-  String getShardId(TrimmedShardedDataChangeRecord record);
+  String getShardId(JSONObject record);
 }

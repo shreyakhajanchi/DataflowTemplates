@@ -50,4 +50,19 @@
         </dependency>
     </dependencies>
 
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <version>${maven-compiler-plugin.version}</version> <!-- Adjust version if needed -->
+                <configuration>
+                    <source>${java.version}</source> <!-- Adjust source version if needed -->
+                    <target>${java.version}</target> <!-- Adjust target version if needed -->
+                    <forceJavacCompilerUse>true</forceJavacCompilerUse>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+
 </project>

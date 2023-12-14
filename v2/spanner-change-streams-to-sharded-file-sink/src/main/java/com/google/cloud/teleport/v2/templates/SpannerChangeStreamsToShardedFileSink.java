@@ -22,15 +22,14 @@ import com.google.cloud.teleport.metadata.TemplateParameter;
 import com.google.cloud.teleport.metadata.TemplateParameter.TemplateEnumOption;
 import com.google.cloud.teleport.v2.common.UncaughtExceptionLogger;
 import com.google.cloud.teleport.v2.spanner.ddl.Ddl;
+import com.google.cloud.teleport.v2.spanner.migrations.cdc.TrimmedShardedDataChangeRecord;
 import com.google.cloud.teleport.v2.spanner.migrations.schema.Schema;
 import com.google.cloud.teleport.v2.spanner.migrations.shard.Shard;
 import com.google.cloud.teleport.v2.spanner.migrations.utils.SessionFileReader;
 import com.google.cloud.teleport.v2.spanner.migrations.utils.ShardFileReader;
 import com.google.cloud.teleport.v2.templates.SpannerChangeStreamsToShardedFileSink.Options;
-import com.google.cloud.teleport.v2.templates.common.TrimmedShardedDataChangeRecord;
 import com.google.cloud.teleport.v2.templates.constants.Constants;
 import com.google.cloud.teleport.v2.templates.transforms.AssignShardIdFn;
-import com.google.cloud.teleport.v2.templates.transforms.ChangeDataProgressTrackerFn;
 import com.google.cloud.teleport.v2.templates.transforms.FileProgressTrackerFn;
 import com.google.cloud.teleport.v2.templates.transforms.FilterRecordsFn;
 import com.google.cloud.teleport.v2.templates.transforms.PreprocessRecordsFn;
@@ -264,6 +263,26 @@ public class SpannerChangeStreamsToShardedFileSink {
     String getRunIdentifier();
 
     void setRunIdentifier(String value);
+
+    @TemplateParameter.Text(
+        order = 17,
+        optional = true,
+        description = "Customization jar location",
+        helpText = "Jar that contains the customization logic.")
+    @Default.String("")
+    String getCustomJarPath();
+
+    void setCustomJarPath(String value);
+
+    @TemplateParameter.Text(
+        order = 18,
+        optional = true,
+        description = "Custom class name",
+        helpText = "Custom class name having the shard id implementation.")
+    @Default.String("")
+    String getShardingCustomClassName();
+
+    void setShardingCustomClassName(String value);
   }
 
   /**
@@ -363,19 +382,12 @@ public class SpannerChangeStreamsToShardedFileSink {
                     ddl,
                     shardingMode,
                     shards.get(0).getLogicalShardId(),
-                    options.getSkipDirectoryName())))
+                    options.getSkipDirectoryName(),
+                    options.getCustomJarPath(),
+                    options.getShardingCustomClassName())))
         .apply(
             "Creating " + options.getWindowDuration() + " Window",
             Window.into(FixedWindows.of(DurationUtils.parseDuration(options.getWindowDuration()))))
-        .apply(
-            "Tracking change data seen",
-            ParDo.of(
-                new ChangeDataProgressTrackerFn(
-                    options.getSpannerProjectId(),
-                    options.getMetadataInstance(),
-                    options.getMetadataDatabase(),
-                    tableSuffix,
-                    options.getRunIdentifier())))
         .apply(
             "Write To GCS",
             WriterGCS.newBuilder()

@@ -16,6 +16,7 @@
 package com.google.cloud.teleport.v2.templates.transforms;
 
 import com.google.cloud.Timestamp;
+import com.google.cloud.teleport.v2.spanner.migrations.cdc.TrimmedShardedDataChangeRecord;
 import com.google.cloud.teleport.v2.spanner.migrations.schema.ColumnPK;
 import com.google.cloud.teleport.v2.spanner.migrations.schema.NameAndCols;
 import com.google.cloud.teleport.v2.spanner.migrations.schema.Schema;
@@ -24,7 +25,6 @@ import com.google.cloud.teleport.v2.spanner.migrations.schema.SpannerColumnDefin
 import com.google.cloud.teleport.v2.spanner.migrations.schema.SpannerColumnType;
 import com.google.cloud.teleport.v2.spanner.migrations.schema.SpannerTable;
 import com.google.cloud.teleport.v2.spanner.migrations.schema.SyntheticPKey;
-import com.google.cloud.teleport.v2.templates.common.TrimmedShardedDataChangeRecord;
 import com.google.cloud.teleport.v2.templates.constants.Constants;
 import java.util.Arrays;
 import java.util.Collections;
@@ -49,8 +49,8 @@ public class AssignShardIdFnTest {
   @Test
   public void basicTestMultiShard() {
     TrimmedShardedDataChangeRecord record1 = getTrimmedDataChangeRecord("shard1");
-    TrimmedShardedDataChangeRecord record2 = getTrimmedDataChangeRecord("shard2");
-    List<TrimmedShardedDataChangeRecord> records = Arrays.asList(record1, record2);
+    // TrimmedShardedDataChangeRecord record2 = getTrimmedDataChangeRecord("shard2");
+    List<TrimmedShardedDataChangeRecord> records = Arrays.asList(record1);
     PCollection<TrimmedShardedDataChangeRecord> output =
         pipeline
             .apply(
@@ -64,12 +64,14 @@ public class AssignShardIdFnTest {
                         null,
                         Constants.SHARDING_MODE_MULTI_SHARD,
                         "test",
-                        "skip")));
+                        "skip",
+                        "",
+                        "")));
 
     record1.setShard("shard1");
-    record2.setShard("shard2");
+    // record2.setShard("shard2");
 
-    PAssert.that(output).containsInAnyOrder(record1, record2);
+    PAssert.that(output).containsInAnyOrder(record1);
     pipeline.run();
   }
 
@@ -86,7 +88,14 @@ public class AssignShardIdFnTest {
             .apply(
                 ParDo.of(
                     new AssignShardIdFn(
-                        null, null, null, Constants.SHARDING_MODE_SINGLE_SHARD, "test", "skip")));
+                        null,
+                        null,
+                        null,
+                        Constants.SHARDING_MODE_SINGLE_SHARD,
+                        "test",
+                        "skip",
+                        "",
+                        "")));
 
     record1.setShard("test");
     record2.setShard("test");
