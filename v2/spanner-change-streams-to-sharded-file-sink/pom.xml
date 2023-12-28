@@ -44,9 +44,20 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.google.cloud.teleport.v2</groupId>
+            <artifactId>spanner-migrations-interface</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.json</groupId>
             <artifactId>json</artifactId>
             <version>${json.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+            <version>2.11.8</version>
+            <scope>compile</scope>
         </dependency>
     </dependencies>
 

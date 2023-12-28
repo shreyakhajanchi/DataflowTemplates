@@ -27,6 +27,7 @@ import com.google.cloud.teleport.v2.spanner.migrations.schema.Schema;
 import com.google.cloud.teleport.v2.spanner.migrations.shard.Shard;
 import com.google.cloud.teleport.v2.spanner.migrations.utils.SessionFileReader;
 import com.google.cloud.teleport.v2.spanner.migrations.utils.ShardFileReader;
+import com.google.cloud.teleport.v2.spanner.migrations.utils.SpannerAccessorImpl;
 import com.google.cloud.teleport.v2.templates.SpannerChangeStreamsToShardedFileSink.Options;
 import com.google.cloud.teleport.v2.templates.constants.Constants;
 import com.google.cloud.teleport.v2.templates.transforms.AssignShardIdFn;
@@ -384,7 +385,8 @@ public class SpannerChangeStreamsToShardedFileSink {
                     shards.get(0).getLogicalShardId(),
                     options.getSkipDirectoryName(),
                     options.getCustomJarPath(),
-                    options.getShardingCustomClassName())))
+                    options.getShardingCustomClassName(),
+                    new SpannerAccessorImpl())))
         .apply(
             "Creating " + options.getWindowDuration() + " Window",
             Window.into(FixedWindows.of(DurationUtils.parseDuration(options.getWindowDuration()))))

@@ -15,10 +15,10 @@
  */
 package com.google.cloud.teleport.v2.spanner.migrations.utils;
 
-/** The interface to get the shard identifier. */
-import org.json.JSONObject;
+import org.apache.beam.sdk.io.gcp.spanner.SpannerAccessor;
+import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
 
-public interface IShardIdFetcher {
-
-  String getShardId(JSONObject record);
+/** Interface to access spanner records. */
+public interface ISpannerAccessor {
+  SpannerAccessor getOrCreate(SpannerConfig spannerConfig);
 }

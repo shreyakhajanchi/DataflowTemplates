@@ -15,49 +15,40 @@
  */
 package com.google.cloud.teleport.v2.templates.utils;
 
-import com.google.cloud.teleport.v2.spanner.migrations.utils.IShardIdFetcher;
+import com.google.cloud.teleport.v2.spanner.migrations.schema.Schema;
+import com.google.cloud.teleport.v2.spanner.migrations.schema.SpannerTable;
+import com.google.cloud.teleport.v2.spanner.utils.IShardIdFetcher;
+import com.google.cloud.teleport.v2.spanner.utils.ShardIdRequest;
+import com.google.cloud.teleport.v2.spanner.utils.ShardIdResponse;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Core implemenation to get the shard identifier. */
+/** Default implementation to get the shard identifier. */
 public class ShardIdFetcherImpl implements IShardIdFetcher {
   private static final Logger LOG = LoggerFactory.getLogger(ShardIdFetcherImpl.class);
+  private final Schema schema;
 
-  public ShardIdFetcherImpl() {}
+  public ShardIdFetcherImpl(Schema schema) {
+    this.schema = schema;
+  }
 
   @Override
-  public String getShardId(JSONObject record) {
+  public ShardIdResponse getShardId(ShardIdRequest shardIdRequest) {
     try {
-      String shardIdColumn = record.getString("shardIdColumn");
-      if (record.getJSONObject("dataRecord").has(shardIdColumn)) {
-        String shardId = record.getJSONObject("dataRecord").get(shardIdColumn).toString();
-        return shardId;
+      String tableName = shardIdRequest.getTableName();
+      String shardIdColumn = getShardIdColumnForTableName(tableName);
+      if (shardIdRequest.getSpannerRecord().containsKey(shardIdColumn)) {
+        String shardId = shardIdRequest.getSpannerRecord().get(shardIdColumn).toString();
+        ShardIdResponse shardIdResponse = new ShardIdResponse();
+        shardIdResponse.setLogicalShardId(shardId);
+        return shardIdResponse;
       } else {
-        LOG.error(
-            "Cannot find entry for the shard id column '"
-                + record.get("shardIdColumn").toString()
-                + "' in record.");
+        LOG.error("Cannot find entry for the shard id column '" + shardIdColumn + "' in record.");
         throw new RuntimeException(
-            "Cannot find entry for the shard id column '"
-                + record.get("shardIdColumn").toString()
-                + "' in record.");
+            "Cannot find entry for the shard id column '" + shardIdColumn + "' in record.");
       }
-
-      /*if (keysJson.has(shardIdColumn)) {
-        String shardId = keysJson.get(shardIdColumn).asText();
-        return shardId;
-      } else if (newValueJson.has(shardIdColumn)) {
-        String shardId = newValueJson.get(shardIdColumn).asText();
-        return shardId;
-      } else if (record.getModType() == ModType.DELETE) {
-        String shardId =
-            fetchShardId(
-                record.getTableName(), record.getCommitTimestamp(), shardIdColumn, keysJson);
-        return shardId;
-      }*/
     } catch (IllegalArgumentException e) {
       LOG.error("Error fetching shard Id column for table: " + e.getMessage());
       throw new RuntimeException("Error fetching shard Id column for table: " + e.getMessage());
@@ -68,5 +59,26 @@ public class ShardIdFetcherImpl implements IShardIdFetcher {
       throw new RuntimeException(
           "Error fetching shard Id colum: " + e.getMessage() + ": " + errors.toString());
     }
+  }
+
+  private String getShardIdColumnForTableName(String tableName) throws IllegalArgumentException {
+    if (!schema.getSpannerToID().containsKey(tableName)) {
+      throw new IllegalArgumentException(
+          "Table " + tableName + " found in change record but not found in session file.");
+    }
+    String tableId = schema.getSpannerToID().get(tableName).getName();
+    if (!schema.getSpSchema().containsKey(tableId)) {
+      throw new IllegalArgumentException(
+          "Table " + tableId + " not found in session file. Please provide a valid session file.");
+    }
+    SpannerTable spTable = schema.getSpSchema().get(tableId);
+    String shardColId = spTable.getShardIdColumn();
+    if (!spTable.getColDefs().containsKey(shardColId)) {
+      throw new IllegalArgumentException(
+          "ColumnId "
+              + shardColId
+              + " not found in session file. Please provide a valid session file.");
+    }
+    return spTable.getColDefs().get(shardColId).getName();
   }
 }

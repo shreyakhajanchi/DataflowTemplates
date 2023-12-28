@@ -15,8 +15,9 @@
  */
 package com.custom;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.cloud.teleport.v2.spanner.migrations.utils.IShardIdFetcher;
+import com.google.cloud.teleport.v2.spanner.utils.IShardIdFetcher;
+import com.google.cloud.teleport.v2.spanner.utils.ShardIdRequest;
+import com.google.cloud.teleport.v2.spanner.utils.ShardIdResponse;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,8 +30,8 @@ public class CustomShardIdFetcher implements IShardIdFetcher {
   public CustomShardIdFetcher() {}
 
   @Override
-  public String getShardId(JSONObject record) {
+  public ShardIdResponse getShardId(ShardIdRequest shardIdRequest) {
     LOG.info("Returning custom sharding function");
-    return "xyz";
+    return new ShardIdResponse();
   }
 }

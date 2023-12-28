@@ -25,19 +25,7 @@
         <version>1.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>spanner-custom-shard</artifactId>
-    <dependencies>
-        <dependency>
-            <groupId>com.google.cloud.teleport.v2</groupId>
-            <artifactId>spanner-common</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.google.cloud.teleport.v2</groupId>
-            <artifactId>spanner-migrations-interface</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-    </dependencies>
+    <artifactId>spanner-migrations-interface</artifactId>
     <build>
         <plugins>
             <plugin>
