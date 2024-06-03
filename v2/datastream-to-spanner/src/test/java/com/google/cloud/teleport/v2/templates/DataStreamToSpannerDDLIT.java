@@ -93,7 +93,8 @@ public class DataStreamToSpannerDDLIT extends DataStreamToSpannerITBase {
                   {
                     put("inputFileFormat", "avro");
                   }
-                });
+                },
+                null);
       }
     }
   }
