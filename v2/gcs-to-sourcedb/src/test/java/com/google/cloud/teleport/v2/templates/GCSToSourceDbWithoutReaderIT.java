@@ -21,6 +21,7 @@ import static org.apache.beam.it.truthmatchers.PipelineAsserts.assertThatPipelin
 import com.google.cloud.teleport.metadata.SkipDirectRunnerTest;
 import com.google.cloud.teleport.metadata.TemplateIntegrationTest;
 import com.google.cloud.teleport.v2.spanner.migrations.shard.Shard;
+import com.google.cloud.teleport.v2.spanner.migrations.transformation.CustomTransformation;
 import com.google.common.io.Resources;
 import com.google.gson.Gson;
 import com.google.gson.JsonArray;
@@ -32,6 +33,7 @@ import java.util.List;
 import java.util.Map;
 import org.apache.beam.it.common.PipelineLauncher;
 import org.apache.beam.it.common.PipelineLauncher.LaunchConfig;
+import org.apache.beam.it.common.utils.IORedirectUtil;
 import org.apache.beam.it.common.utils.PipelineUtils;
 import org.apache.beam.it.common.utils.ResourceManagerUtils;
 import org.apache.beam.it.gcp.TemplateTestBase;
@@ -59,6 +61,8 @@ public class GCSToSourceDbWithoutReaderIT extends TemplateTestBase {
   private static final String SESSION_FILE_RESOURSE = "GCSToSourceDbWithoutReaderIT/session.json";
 
   private static final String TABLE = "Users";
+
+  private static final String TABLE2 = "AllDatatypeTransformation";
   private static HashSet<GCSToSourceDbWithoutReaderIT> testInstances = new HashSet<>();
   private static PipelineLauncher.LaunchInfo jobInfo;
   private static SpannerResourceManager spannerMetadataResourceManager;
@@ -71,7 +75,7 @@ public class GCSToSourceDbWithoutReaderIT extends TemplateTestBase {
    * @throws IOException
    */
   @Before
-  public void setUp() throws IOException {
+  public void setUp() throws IOException, InterruptedException {
     skipBaseCleanup = true;
     synchronized (GCSToSourceDbWithoutReaderIT.class) {
       testInstances.add(this);
@@ -87,8 +91,12 @@ public class GCSToSourceDbWithoutReaderIT extends TemplateTestBase {
         createAndUploadShardConfigToGcs(gcsResourceManager, jdbcResourceManager);
         gcsResourceManager.uploadArtifact(
             "input/session.json", Resources.getResource(SESSION_FILE_RESOURSE).getPath());
-
-        launchWriterDataflowJob();
+        createAndUploadJarToGcs("shard1");
+        CustomTransformation customTransformation =
+                CustomTransformation.builder(
+                                "customTransformation.jar", "com.custom.CustomTransformationWithShardForIT")
+                        .build();
+        launchWriterDataflowJob(customTransformation);
       }
     }
   }
@@ -150,9 +158,31 @@ public class GCSToSourceDbWithoutReaderIT extends TemplateTestBase {
     JDBCResourceManager.JDBCSchema schema = new JDBCResourceManager.JDBCSchema(columns, "id");
 
     jdbcResourceManager.createTable(TABLE, schema);
+
+    columns.clear();
+    columns.put("varchar_column", "VARCHAR(20) NOT NULL");
+    columns.put("tinyint_column", "TINYINT");
+    columns.put("text_column", "TEXT");
+    columns.put("date_column", "DATE");
+    columns.put("int_column", "INT");
+    columns.put("bigint_column", "BIGINT");
+    columns.put("float_column", "FLOAT(10,2)");
+    columns.put("double_column", "DOUBLE");
+    columns.put("decimal_column", "DECIMAL(10,2)");
+    columns.put("datetime_column", "DATETIME");
+    columns.put("timestamp_column", "TIMESTAMP");
+    columns.put("time_column", "TIME");
+    columns.put("year_column", "YEAR");
+    columns.put("blob_column", "BLOB");
+    columns.put("enum_column", "ENUM('1','2','3')");
+    columns.put("bool_column", "TINYINT(1)");
+    columns.put("binary_column", "BINARY(20)");
+    columns.put("bit_column", "BIT(7)");
+    schema = new JDBCResourceManager.JDBCSchema(columns, "varchar_column");
+    jdbcResourceManager.createTable(TABLE2, schema);
   }
 
-  private void launchWriterDataflowJob() throws IOException {
+  private void launchWriterDataflowJob(CustomTransformation customTransformation) throws IOException {
     Map<String, String> params =
         new HashMap<>() {
           {
@@ -167,6 +197,13 @@ public class GCSToSourceDbWithoutReaderIT extends TemplateTestBase {
             put("windowDuration", "10s");
           }
         };
+
+    if (customTransformation != null) {
+      params.put(
+              "transformationJarPath",
+              getGcsPath("input/" + customTransformation.jarPath()));
+      params.put("transformationClassName", customTransformation.classPath());
+    }
     String jobName = PipelineUtils.createJobName(testName);
     LaunchConfig.Builder options = LaunchConfig.builder(jobName, specPath);
     options.setParameters(params);
@@ -191,5 +228,22 @@ public class GCSToSourceDbWithoutReaderIT extends TemplateTestBase {
     String shardFileContents = ja.toString();
     LOG.info("Shard file contents: {}", shardFileContents);
     gcsResourceManager.createArtifact("input/shard.json", shardFileContents);
+  }
+
+  public void createAndUploadJarToGcs(String gcsPathPrefix)
+          throws IOException, InterruptedException {
+    String[] shellCommand = {"/bin/bash", "-c", "cd ../spanner-custom-shard"};
+
+    Process exec = Runtime.getRuntime().exec(shellCommand);
+
+    IORedirectUtil.redirectLinesLog(exec.getInputStream(), LOG);
+    IORedirectUtil.redirectLinesLog(exec.getErrorStream(), LOG);
+
+    if (exec.waitFor() != 0) {
+      throw new RuntimeException("Error staging template, check Maven logs.");
+    }
+    gcsResourceManager.uploadArtifact(
+            gcsPathPrefix + "/customTransformation.jar",
+            "../spanner-custom-shard/target/spanner-custom-shard-1.0-SNAPSHOT.jar");
   }
 }
