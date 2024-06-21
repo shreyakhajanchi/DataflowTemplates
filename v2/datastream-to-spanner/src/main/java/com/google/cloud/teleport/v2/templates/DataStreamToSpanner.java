@@ -206,7 +206,6 @@ public class DataStreamToSpanner {
 
     @TemplateParameter.Text(
         order = 7,
-        groupName = "Target",
         optional = true,
         description = "The Cloud Spanner Endpoint to call",
         helpText = "The Cloud Spanner endpoint to call in the template.",
@@ -229,7 +228,7 @@ public class DataStreamToSpanner {
 
     @TemplateParameter.Text(
         order = 9,
-        groupName = "Source",
+        optional = true,
         description = "Datastream stream name.",
         helpText =
             "The name or template for the stream to poll for schema information and source type.")
@@ -605,7 +604,10 @@ public class DataStreamToSpanner {
           PCollectionList.of(datastreamJsonRecords)
               .and(dlqJsonRecords)
               .apply(Flatten.pCollections())
-              .apply("Reshuffle", Reshuffle.viaRandomKey());
+              .apply(
+                  "Reshuffle",
+                  Reshuffle.<FailsafeElement<String, String>>viaRandomKey()
+                      .withNumBuckets(2500000));
     } else {
       LOG.info("DLQ retry flow");
       jsonRecords =
