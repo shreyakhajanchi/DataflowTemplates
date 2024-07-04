@@ -15,6 +15,7 @@
  */
 package com.google.cloud.teleport.v2.templates;
 
+import com.google.api.gax.retrying.RetrySettings;
 import com.google.api.services.datastream.v1.model.SourceConfig;
 import com.google.cloud.spanner.Options.RpcPriority;
 import com.google.cloud.teleport.metadata.Template;
@@ -549,7 +550,12 @@ public class DataStreamToSpanner {
             .withHost(ValueProvider.StaticValueProvider.of(options.getSpannerHost()))
             .withInstanceId(ValueProvider.StaticValueProvider.of(options.getInstanceId()))
             .withDatabaseId(ValueProvider.StaticValueProvider.of(options.getDatabaseId()))
-            .withRpcPriority(ValueProvider.StaticValueProvider.of(options.getSpannerPriority()));
+            .withRpcPriority(ValueProvider.StaticValueProvider.of(options.getSpannerPriority()))
+            .withCommitRetrySettings(
+                RetrySettings.newBuilder()
+                    .setTotalTimeout(org.threeten.bp.Duration.ofMinutes(60))
+                    .build());
+
     /* Process information schema
      * 1) Read information schema from destination Cloud Spanner database
      * 2) Check if shadow tables are present and create if necessary
@@ -606,8 +612,7 @@ public class DataStreamToSpanner {
               .apply(Flatten.pCollections())
               .apply(
                   "Reshuffle",
-                  Reshuffle.<FailsafeElement<String, String>>viaRandomKey()
-                      .withNumBuckets(2500000));
+                  Reshuffle.<FailsafeElement<String, String>>viaRandomKey().withNumBuckets(620000));
     } else {
       LOG.info("DLQ retry flow");
       jsonRecords =

@@ -171,24 +171,29 @@ class SpannerTransactionWriterDoFn extends DoFn<FailsafeElement<String, String>,
               (TransactionCallable<Void>)
                   transaction -> {
                     try (TransactionContext transactionContext = transaction) {
-                      // Sequence information for the last change event.
-                      ChangeEventSequence previousChangeEventSequence =
-                          ChangeEventSequenceFactory.createChangeEventSequenceFromShadowTable(
-                              transactionContext, changeEventContext);
+                      try {
+                        // Sequence information for the last change event.
+                        ChangeEventSequence previousChangeEventSequence =
+                            ChangeEventSequenceFactory.createChangeEventSequenceFromShadowTable(
+                                transactionContext, changeEventContext);
 
-                      /* There was a previous event recorded with a greater sequence information
-                       * than current. Hence, skip the current event.
-                       */
-                      if (previousChangeEventSequence != null
-                          && previousChangeEventSequence.compareTo(currentChangeEventSequence)
-                              >= 0) {
+                        /* There was a previous event recorded with a greater sequence information
+                         * than current. Hence, skip the current event.
+                         */
+                        if (previousChangeEventSequence != null
+                            && previousChangeEventSequence.compareTo(currentChangeEventSequence)
+                                >= 0) {
+                          return null;
+                        }
+
+                        // Apply shadow and data table mutations.
+                        transactionContext.buffer(changeEventContext.getMutations());
+
                         return null;
+                      } catch (Exception e) {
+                        transactionContext.close();
+                        throw e;
                       }
-
-                      // Apply shadow and data table mutations.
-                      transactionContext.buffer(changeEventContext.getMutations());
-
-                      return null;
                     }
                   });
       com.google.cloud.Timestamp timestamp = com.google.cloud.Timestamp.now();
