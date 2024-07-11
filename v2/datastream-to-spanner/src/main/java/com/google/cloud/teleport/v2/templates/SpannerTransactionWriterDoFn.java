@@ -97,6 +97,18 @@ class SpannerTransactionWriterDoFn extends DoFn<FailsafeElement<String, String>,
   private final Counter retryableErrors =
       Metrics.counter(SpannerTransactionWriterDoFn.class, "Retryable errors");
 
+  private final Counter spannerTransactionProcessElement =
+      Metrics.counter(SpannerTransactionWriterDoFn.class, "Spanner Transaction process element");
+
+  private final Counter transactionStarted =
+      Metrics.counter(SpannerTransactionWriterDoFn.class, "Transaction started");
+
+  private final Counter spannerException =
+      Metrics.counter(SpannerTransactionWriterDoFn.class, "Spanner Exception");
+
+  private final Counter illegalStateException =
+      Metrics.counter(SpannerTransactionWriterDoFn.class, "Illegal state exception");
+
   // The max length of tag allowed in Spanner Transaction tags.
   private static final int MAX_TXN_TAG_LENGTH = 50;
 
@@ -134,6 +146,7 @@ class SpannerTransactionWriterDoFn extends DoFn<FailsafeElement<String, String>,
 
   @ProcessElement
   public void processElement(ProcessContext c) {
+    spannerTransactionProcessElement.inc();
     FailsafeElement<String, String> msg = c.element();
     Ddl ddl = c.sideInput(ddlView);
 
@@ -172,6 +185,7 @@ class SpannerTransactionWriterDoFn extends DoFn<FailsafeElement<String, String>,
                   transaction -> {
                     try (TransactionContext transactionContext = transaction) {
                       try {
+                        transactionStarted.inc();
                         // Sequence information for the last change event.
                         ChangeEventSequence previousChangeEventSequence =
                             ChangeEventSequenceFactory.createChangeEventSequenceFromShadowTable(
@@ -213,7 +227,7 @@ class SpannerTransactionWriterDoFn extends DoFn<FailsafeElement<String, String>,
       // Errors that result during Event conversions are not retryable.
       outputWithErrorTag(c, msg, e, DatastreamToSpannerConstants.PERMANENT_ERROR_TAG);
       conversionErrors.inc();
-    } catch (SpannerException | IllegalStateException ex) {
+    } catch (SpannerException ex) {
       /* Errors that happen when writing to Cloud Spanner are considered retryable.
        * Since all event conversion errors are caught beforehand as permanent errors,
        * any other errors encountered while writing to Cloud Spanner can be retried.
@@ -225,6 +239,26 @@ class SpannerTransactionWriterDoFn extends DoFn<FailsafeElement<String, String>,
        * in which case if this event is requed to same or different node at a later point in time,
        * a retry might work.
        */
+      spannerException.inc();
+      outputWithErrorTag(c, msg, ex, DatastreamToSpannerConstants.RETRYABLE_ERROR_TAG);
+      // do not increment the retry error count if this was retry attempt
+      if (!isRetryRecord) {
+        retryableErrors.inc();
+        retryableErrors.inc();
+      }
+    } catch (IllegalStateException ex) {
+      /* Errors that happen when writing to Cloud Spanner are considered retryable.
+       * Since all event conversion errors are caught beforehand as permanent errors,
+       * any other errors encountered while writing to Cloud Spanner can be retried.
+       * Examples include:
+       * 1. Deadline exceeded errors from Cloud Spanner.
+       * 2. Failures due to foreign key/interleaved table constraints.
+       * 3. Any transient errors in Cloud Spanner.
+       * IllegalStateException can occur due to conditions like spanner pool being closed,
+       * in which case if this event is requed to same or different node at a later point in time,
+       * a retry might work.
+       */
+      illegalStateException.inc();
       outputWithErrorTag(c, msg, ex, DatastreamToSpannerConstants.RETRYABLE_ERROR_TAG);
       // do not increment the retry error count if this was retry attempt
       if (!isRetryRecord) {
