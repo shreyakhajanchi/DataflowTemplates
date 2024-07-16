@@ -553,7 +553,14 @@ public class DataStreamToSpanner {
             .withRpcPriority(ValueProvider.StaticValueProvider.of(options.getSpannerPriority()))
             .withCommitRetrySettings(
                 RetrySettings.newBuilder()
-                    .setTotalTimeout(org.threeten.bp.Duration.ofMinutes(60))
+                    .setTotalTimeout(org.threeten.bp.Duration.ofMinutes(4))
+                    .setInitialRetryDelay(org.threeten.bp.Duration.ofMinutes(0))
+                    .setRetryDelayMultiplier(1)
+                    .setMaxRetryDelay(org.threeten.bp.Duration.ofMinutes(0))
+                    .setInitialRpcTimeout(org.threeten.bp.Duration.ofMinutes(4))
+                    .setRpcTimeoutMultiplier(1)
+                    .setMaxRpcTimeout(org.threeten.bp.Duration.ofMinutes(4))
+                    .setMaxAttempts(1)
                     .build());
 
     /* Process information schema
