@@ -48,16 +48,16 @@ public class WatchdogRunnable implements Runnable, Serializable {
     while (keepWatchdogRunning.get()) {
       if (isInTransaction.get()) {
         long currentTransactionCount = transactionAttemptCount.get();
-        if (lastTransactionCount == currentTransactionCount) {
-          killedThreads.inc();
-          LOG.warn("Transaction is not making progress after 15 minutes. Terminating process");
-          System.exit(1);
-        }
         LOG.info(
             "Current transaction count: "
                 + currentTransactionCount
                 + ", last transaction count: "
                 + lastTransactionCount);
+        if (lastTransactionCount == currentTransactionCount) {
+          killedThreads.inc();
+          LOG.warn("Transaction is not making progress after 15 minutes. Terminating process");
+          System.exit(1);
+        }
         lastTransactionCount = currentTransactionCount;
       }
       Uninterruptibles.sleepUninterruptibly(Duration.ofMinutes(15));
