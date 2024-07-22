@@ -110,6 +110,8 @@ class SpannerTransactionWriterDoFn extends DoFn<FailsafeElement<String, String>,
 
   private final Counter illegalStateException =
       Metrics.counter(SpannerTransactionWriterDoFn.class, "Illegal state exception");
+  private final Counter killedThreads =
+      Metrics.counter(SpannerTransactionWriterDoFn.class, "Killed threads");
 
   // The max length of tag allowed in Spanner Transaction tags.
   private static final int MAX_TXN_TAG_LENGTH = 50;
@@ -149,7 +151,8 @@ class SpannerTransactionWriterDoFn extends DoFn<FailsafeElement<String, String>,
     keepWatchdogRunning = new AtomicBoolean(true);
     watchdogThread =
         new Thread(
-            new WatchdogRunnable(transactionAttemptCount, isInTransaction, keepWatchdogRunning),
+            new WatchdogRunnable(
+                transactionAttemptCount, isInTransaction, keepWatchdogRunning, killedThreads),
             "SpannerTransactionWriterDoFn.WatchdogThread");
     watchdogThread.setDaemon(true);
     watchdogThread.start();

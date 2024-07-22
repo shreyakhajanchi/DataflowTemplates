@@ -21,13 +21,12 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.beam.sdk.metrics.Counter;
-import org.apache.beam.sdk.metrics.Metrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class WatchdogRunnable implements Runnable, Serializable {
   private static final Logger LOG = LoggerFactory.getLogger(WatchdogRunnable.class);
-  private final Counter killedThreads = Metrics.counter(WatchdogRunnable.class, "Killed threads");
+  private final Counter killedThreads;
 
   private final AtomicLong transactionAttemptCount;
   private final AtomicBoolean isInTransaction;
@@ -36,10 +35,12 @@ public class WatchdogRunnable implements Runnable, Serializable {
   public WatchdogRunnable(
       AtomicLong transactionAttemptCount,
       AtomicBoolean isInTransaction,
-      AtomicBoolean keepWatchdogRunning) {
+      AtomicBoolean keepWatchdogRunning,
+      Counter killedThreads) {
     this.transactionAttemptCount = transactionAttemptCount;
     this.isInTransaction = isInTransaction;
     this.keepWatchdogRunning = keepWatchdogRunning;
+    this.killedThreads = killedThreads;
   }
 
   @Override
