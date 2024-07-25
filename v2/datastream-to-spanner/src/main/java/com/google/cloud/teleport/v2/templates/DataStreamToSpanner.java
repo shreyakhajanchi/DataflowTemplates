@@ -15,6 +15,7 @@
  */
 package com.google.cloud.teleport.v2.templates;
 
+import com.google.api.gax.retrying.RetrySettings;
 import com.google.api.services.datastream.v1.model.SourceConfig;
 import com.google.cloud.spanner.Options.RpcPriority;
 import com.google.cloud.teleport.metadata.Template;
@@ -510,6 +511,7 @@ public class DataStreamToSpanner {
   public static void main(String[] args) {
     UncaughtExceptionLogger.register();
     LOG.info("Starting DataStream to Cloud Spanner");
+    LOG.info("Job started with args: " + args);
     Options options = PipelineOptionsFactory.fromArgs(args).withValidation().as(Options.class);
     options.setStreaming(true);
     validateSourceType(options);
@@ -549,7 +551,18 @@ public class DataStreamToSpanner {
             .withHost(ValueProvider.StaticValueProvider.of(options.getSpannerHost()))
             .withInstanceId(ValueProvider.StaticValueProvider.of(options.getInstanceId()))
             .withDatabaseId(ValueProvider.StaticValueProvider.of(options.getDatabaseId()))
-            .withRpcPriority(ValueProvider.StaticValueProvider.of(options.getSpannerPriority()));
+            .withRpcPriority(ValueProvider.StaticValueProvider.of(options.getSpannerPriority()))
+            .withCommitRetrySettings(
+                RetrySettings.newBuilder()
+                    .setTotalTimeout(org.threeten.bp.Duration.ofMinutes(4))
+                    .setInitialRetryDelay(org.threeten.bp.Duration.ofMinutes(0))
+                    .setRetryDelayMultiplier(1)
+                    .setMaxRetryDelay(org.threeten.bp.Duration.ofMinutes(0))
+                    .setInitialRpcTimeout(org.threeten.bp.Duration.ofMinutes(4))
+                    .setRpcTimeoutMultiplier(1)
+                    .setMaxRpcTimeout(org.threeten.bp.Duration.ofMinutes(4))
+                    .setMaxAttempts(1)
+                    .build());
 
     /* Process information schema
      * 1) Read information schema from destination Cloud Spanner database
@@ -607,7 +620,7 @@ public class DataStreamToSpanner {
               .apply(Flatten.pCollections())
               .apply(
                   "Reshuffle",
-                  Reshuffle.<FailsafeElement<String, String>>viaRandomKey().withNumBuckets(620000));
+                  Reshuffle.<FailsafeElement<String, String>>viaRandomKey().withNumBuckets(250000));
     } else {
       LOG.info("DLQ retry flow");
       jsonRecords =
@@ -716,8 +729,7 @@ public class DataStreamToSpanner {
         PCollectionList.of(dlqErrorRecords)
             .and(spannerWriteResults.permanentErrors())
             .and(transformedRecords.get(DatastreamToSpannerConstants.PERMANENT_ERROR_TAG))
-            .apply(Flatten.pCollections())
-            .apply("Reshuffle", Reshuffle.viaRandomKey());
+            .apply(Flatten.pCollections());
     // increment the metrics
     permanentErrors
         .apply("Update metrics", ParDo.of(new MetricUpdaterDoFn(isRegularMode)))
