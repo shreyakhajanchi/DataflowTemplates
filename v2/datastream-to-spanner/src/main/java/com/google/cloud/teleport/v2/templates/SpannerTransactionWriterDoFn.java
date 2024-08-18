@@ -205,10 +205,10 @@ class SpannerTransactionWriterDoFn extends DoFn<FailsafeElement<String, String>,
           .run(
               (TransactionCallable<Void>)
                   transaction -> {
+                    transactionStarted.inc();
+                    isInTransaction.set(true);
                     try (TransactionContext transactionContext = transaction) {
                       try {
-                        transactionStarted.inc();
-                        isInTransaction.set(true);
                         transactionAttemptCount.incrementAndGet();
                         // Sequence information for the last change event.
                         ChangeEventSequence previousChangeEventSequence =

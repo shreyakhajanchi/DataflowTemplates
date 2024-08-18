@@ -620,7 +620,7 @@ public class DataStreamToSpanner {
               .apply(Flatten.pCollections())
               .apply(
                   "Reshuffle",
-                  Reshuffle.<FailsafeElement<String, String>>viaRandomKey().withNumBuckets(250000));
+                  Reshuffle.<FailsafeElement<String, String>>viaRandomKey().withNumBuckets(640000));
     } else {
       LOG.info("DLQ retry flow");
       jsonRecords =
