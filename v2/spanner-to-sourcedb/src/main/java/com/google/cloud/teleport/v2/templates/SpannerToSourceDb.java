@@ -26,9 +26,6 @@ import com.google.cloud.teleport.metadata.TemplateCategory;
 import com.google.cloud.teleport.metadata.TemplateParameter;
 import com.google.cloud.teleport.metadata.TemplateParameter.TemplateEnumOption;
 import com.google.cloud.teleport.v2.cdc.dlq.DeadLetterQueueManager;
-import com.google.cloud.teleport.v2.cdc.dlq.PubSubNotifiedDlqIO;
-import com.google.cloud.teleport.v2.cdc.dlq.StringDeadLetterQueueSanitizer;
-import com.google.cloud.teleport.v2.coders.FailsafeElementCoder;
 import com.google.cloud.teleport.v2.common.UncaughtExceptionLogger;
 import com.google.cloud.teleport.v2.spanner.ddl.Ddl;
 import com.google.cloud.teleport.v2.spanner.migrations.schema.ISchemaMapper;
@@ -39,35 +36,17 @@ import com.google.cloud.teleport.v2.spanner.migrations.schema.SessionBasedMapper
 import com.google.cloud.teleport.v2.spanner.migrations.shard.CassandraShard;
 import com.google.cloud.teleport.v2.spanner.migrations.shard.Shard;
 import com.google.cloud.teleport.v2.spanner.migrations.spanner.SpannerSchema;
-import com.google.cloud.teleport.v2.spanner.migrations.transformation.CustomTransformation;
-import com.google.cloud.teleport.v2.spanner.migrations.utils.CassandraConfigFileReader;
 import com.google.cloud.teleport.v2.spanner.migrations.utils.CassandraDriverConfigLoader;
-import com.google.cloud.teleport.v2.spanner.migrations.utils.SecretManagerAccessorImpl;
-import com.google.cloud.teleport.v2.spanner.migrations.utils.ShardFileReader;
 import com.google.cloud.teleport.v2.spanner.sourceddl.CassandraInformationSchemaScanner;
 import com.google.cloud.teleport.v2.spanner.sourceddl.MySqlInformationSchemaScanner;
 import com.google.cloud.teleport.v2.spanner.sourceddl.SourceSchema;
 import com.google.cloud.teleport.v2.spanner.sourceddl.SourceSchemaScanner;
 import com.google.cloud.teleport.v2.templates.SpannerToSourceDb.Options;
-import com.google.cloud.teleport.v2.templates.changestream.TrimmedShardedDataChangeRecord;
-import com.google.cloud.teleport.v2.templates.constants.Constants;
-import com.google.cloud.teleport.v2.templates.transforms.AssignShardIdFn;
-import com.google.cloud.teleport.v2.templates.transforms.ConvertChangeStreamErrorRecordToFailsafeElementFn;
-import com.google.cloud.teleport.v2.templates.transforms.ConvertDlqRecordToTrimmedShardedDataChangeRecordFn;
-import com.google.cloud.teleport.v2.templates.transforms.FilterRecordsFn;
-import com.google.cloud.teleport.v2.templates.transforms.PreprocessRecordsFn;
-import com.google.cloud.teleport.v2.templates.transforms.SourceWriterTransform;
-import com.google.cloud.teleport.v2.templates.transforms.UpdateDlqMetricsFn;
 import com.google.cloud.teleport.v2.templates.utils.ShadowTableCreator;
-import com.google.cloud.teleport.v2.transforms.DLQWriteTransform;
-import com.google.cloud.teleport.v2.values.FailsafeElement;
-import com.google.common.base.Strings;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import java.sql.Connection;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import org.apache.beam.runners.dataflow.options.DataflowPipelineDebugOptions;
 import org.apache.beam.runners.dataflow.options.DataflowPipelineOptions;
@@ -75,28 +54,18 @@ import org.apache.beam.runners.dataflow.options.DataflowPipelineWorkerPoolOption
 import org.apache.beam.runners.dataflow.options.DataflowPipelineWorkerPoolOptions.AutoscalingAlgorithmType;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
-import org.apache.beam.sdk.coders.KvCoder;
 import org.apache.beam.sdk.coders.SerializableCoder;
-import org.apache.beam.sdk.coders.StringUtf8Coder;
-import org.apache.beam.sdk.coders.VarLongCoder;
 import org.apache.beam.sdk.io.FileSystems;
 import org.apache.beam.sdk.io.fs.ResolveOptions.StandardResolveOptions;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerAccessor;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerIO;
-import org.apache.beam.sdk.io.gcp.spanner.SpannerServiceFactoryImpl;
+import org.apache.beam.sdk.io.gcp.spanner.changestreams.model.DataChangeRecord;
 import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.options.StreamingOptions;
 import org.apache.beam.sdk.options.ValueProvider;
-import org.apache.beam.sdk.transforms.Flatten;
-import org.apache.beam.sdk.transforms.MapElements;
-import org.apache.beam.sdk.transforms.ParDo;
-import org.apache.beam.sdk.transforms.Reshuffle;
-import org.apache.beam.sdk.values.PCollection;
-import org.apache.beam.sdk.values.PCollectionList;
-import org.apache.beam.sdk.values.PCollectionTuple;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -542,6 +511,7 @@ public class SpannerToSourceDb {
             ? pipeline.getOptions().as(DataflowPipelineWorkerPoolOptions.class).getMaxNumWorkers()
             : 1;
     int connectionPoolSizePerWorker = (int) (options.getMaxShardConnections() / maxNumWorkers);
+    LOG.info("Connection pool size per worker" + connectionPoolSizePerWorker);
     if (connectionPoolSizePerWorker < 1) {
       // This can happen when the number of workers is more than max.
       // This can cause overload on the source database. Error out and let the user know.
@@ -560,6 +530,7 @@ public class SpannerToSourceDb {
               + " incease the max shard connections");
     }
 
+    String stagingHost = "https://preprod-spanner.sandbox.googleapis.com";
     // Prepare Spanner config
     SpannerConfig spannerConfig =
         SpannerConfig.create()
@@ -598,242 +569,14 @@ public class SpannerToSourceDb {
     Ddl ddl = SpannerSchema.getInformationSchemaAsDdl(spannerConfig);
     List<Shard> shards;
     String shardingMode;
-    if (MYSQL_SOURCE_TYPE.equals(options.getSourceType())) {
-      ShardFileReader shardFileReader = new ShardFileReader(new SecretManagerAccessorImpl());
-      shards = shardFileReader.getOrderedShardDetails(options.getSourceShardsFilePath());
-      shardingMode = Constants.SHARDING_MODE_MULTI_SHARD;
+    pipeline
+        .getCoderRegistry()
+        .registerCoderForClass(
+            DataChangeRecord.class, SerializableCoder.of(DataChangeRecord.class));
 
-    } else {
-      CassandraConfigFileReader cassandraConfigFileReader = new CassandraConfigFileReader();
-      shards = cassandraConfigFileReader.getCassandraShard(options.getSourceShardsFilePath());
-      LOG.info("Cassandra config is: {}", shards.get(0));
-      shardingMode = Constants.SHARDING_MODE_SINGLE_SHARD;
-    }
-    SourceSchema sourceSchema = fetchSourceSchema(options, shards);
-    LOG.info("Source schema: {}", sourceSchema);
-
-    if (shards.size() == 1 && !options.getIsShardedMigration()) {
-      shardingMode = Constants.SHARDING_MODE_SINGLE_SHARD;
-      Shard shard = shards.get(0);
-      if (shard.getLogicalShardId() == null) {
-        shard.setLogicalShardId(Constants.DEFAULT_SHARD_ID);
-        LOG.info(
-            "Logical shard id was not found, hence setting it to : " + Constants.DEFAULT_SHARD_ID);
-      }
-    }
-
-    boolean isRegularMode = "regular".equals(options.getRunMode());
-    PCollectionTuple reconsumedElements = null;
-    DeadLetterQueueManager dlqManager = buildDlqManager(options);
-
-    int reshuffleBucketSize =
-        maxNumWorkers
-            * (debugOptions.getNumberOfWorkerHarnessThreads() > 0
-                ? debugOptions.getNumberOfWorkerHarnessThreads()
-                : Constants.DEFAULT_WORKER_HARNESS_THREAD_COUNT);
-
-    if (isRegularMode && (!Strings.isNullOrEmpty(options.getDlqGcsPubSubSubscription()))) {
-      reconsumedElements =
-          dlqManager.getReconsumerDataTransformForFiles(
-              pipeline.apply(
-                  "Read retry from PubSub",
-                  new PubSubNotifiedDlqIO(
-                      options.getDlqGcsPubSubSubscription(),
-                      // file paths to ignore when re-consuming for retry
-                      new ArrayList<String>(
-                          Arrays.asList(
-                              "/severe/",
-                              "/tmp_retry",
-                              "/tmp_severe/",
-                              ".temp",
-                              "/tmp_skip/",
-                              "/" + options.getSkipDirectoryName())))));
-    } else {
-      reconsumedElements =
-          dlqManager.getReconsumerDataTransform(
-              pipeline.apply(dlqManager.dlqReconsumer(options.getDlqRetryMinutes())));
-    }
-
-    PCollection<FailsafeElement<String, String>> dlqJsonStrRecords =
-        reconsumedElements
-            .get(DeadLetterQueueManager.RETRYABLE_ERRORS)
-            .setCoder(FailsafeElementCoder.of(StringUtf8Coder.of(), StringUtf8Coder.of()));
-
-    PCollection<TrimmedShardedDataChangeRecord> dlqRecords =
-        dlqJsonStrRecords
-            .apply(
-                "Convert DLQ records to TrimmedShardedDataChangeRecord",
-                ParDo.of(new ConvertDlqRecordToTrimmedShardedDataChangeRecordFn()))
-            .setCoder(SerializableCoder.of(TrimmedShardedDataChangeRecord.class));
-    PCollection<TrimmedShardedDataChangeRecord> mergedRecords = null;
-
-    if (options.getFailureInjectionParameter() != null
-        && !options.getFailureInjectionParameter().isBlank()) {
-      spannerConfig =
-          SpannerServiceFactoryImpl.createSpannerService(
-              spannerConfig, options.getFailureInjectionParameter());
-    }
-
-    if (isRegularMode) {
-      PCollection<TrimmedShardedDataChangeRecord> changeRecordsFromDB =
-          pipeline
-              .apply(
-                  getReadChangeStreamDoFn(
-                      options,
-                      spannerConfig)) // This emits PCollection<DataChangeRecord> which is Spanner
-              // change
-              // stream data
-              .apply("Reshuffle", Reshuffle.viaRandomKey())
-              .apply("Filteration", ParDo.of(new FilterRecordsFn(options.getFiltrationMode())))
-              .apply("Preprocess", ParDo.of(new PreprocessRecordsFn()))
-              .setCoder(SerializableCoder.of(TrimmedShardedDataChangeRecord.class));
-      mergedRecords =
-          PCollectionList.of(changeRecordsFromDB)
-              .and(dlqRecords)
-              .apply("Flatten", Flatten.pCollections())
-              .setCoder(SerializableCoder.of(TrimmedShardedDataChangeRecord.class));
-    } else {
-      mergedRecords = dlqRecords;
-    }
-    CustomTransformation customTransformation =
-        CustomTransformation.builder(
-                options.getTransformationJarPath(), options.getTransformationClassName())
-            .setCustomParameters(options.getTransformationCustomParameters())
-            .build();
-    ISchemaMapper schemaMapper = getSchemaMapper(options, ddl);
-
-    if (options.getFailureInjectionParameter() != null
-        && !options.getFailureInjectionParameter().isBlank()) {
-      spannerMetadataConfig =
-          SpannerServiceFactoryImpl.createSpannerService(
-              spannerMetadataConfig, options.getFailureInjectionParameter());
-    }
-
-    SourceWriterTransform.Result sourceWriterOutput =
-        mergedRecords
-            .apply(
-                "AssignShardId", // This emits PCollection<KV<Long,
-                // TrimmedShardedDataChangeRecord>> which is Spanner change stream data with key as
-                // PK
-                // mod
-                // number of parallelism
-                ParDo.of(
-                    new AssignShardIdFn(
-                        spannerConfig,
-                        schemaMapper,
-                        ddl,
-                        sourceSchema,
-                        shardingMode,
-                        shards.get(0).getLogicalShardId(),
-                        options.getSkipDirectoryName(),
-                        options.getShardingCustomJarPath(),
-                        options.getShardingCustomClassName(),
-                        options.getShardingCustomParameters(),
-                        options.getMaxShardConnections() * shards.size(),
-                        options.getSourceType()))) // currently assuming that all shards accept the
-            // same
-            .setCoder(
-                KvCoder.of(
-                    VarLongCoder.of(), SerializableCoder.of(TrimmedShardedDataChangeRecord.class)))
-            .apply("Reshuffle2", Reshuffle.of())
-            .apply(
-                "Write to source",
-                new SourceWriterTransform(
-                    shards,
-                    schemaMapper,
-                    spannerMetadataConfig,
-                    options.getSourceDbTimezoneOffset(),
-                    ddl,
-                    sourceSchema,
-                    options.getShadowTablePrefix(),
-                    options.getSkipDirectoryName(),
-                    connectionPoolSizePerWorker,
-                    options.getSourceType(),
-                    customTransformation));
-
-    PCollection<FailsafeElement<String, String>> dlqPermErrorRecords =
-        reconsumedElements
-            .get(DeadLetterQueueManager.PERMANENT_ERRORS)
-            .setCoder(FailsafeElementCoder.of(StringUtf8Coder.of(), StringUtf8Coder.of()));
-
-    PCollection<FailsafeElement<String, String>> permErrorsFromSourceWriter =
-        sourceWriterOutput
-            .permanentErrors()
-            .setCoder(StringUtf8Coder.of())
-            .apply(
-                "Reshuffle3", Reshuffle.<String>viaRandomKey().withNumBuckets(reshuffleBucketSize))
-            .apply(
-                "Convert permanent errors from source writer to DLQ format",
-                ParDo.of(new ConvertChangeStreamErrorRecordToFailsafeElementFn()))
-            .setCoder(FailsafeElementCoder.of(StringUtf8Coder.of(), StringUtf8Coder.of()));
-
-    PCollection<FailsafeElement<String, String>> permanentErrors =
-        PCollectionList.of(dlqPermErrorRecords)
-            .and(permErrorsFromSourceWriter)
-            .apply(Flatten.pCollections())
-            .apply("Reshuffle", Reshuffle.viaRandomKey());
-
-    permanentErrors
-        .apply("Update DLQ metrics", ParDo.of(new UpdateDlqMetricsFn(isRegularMode)))
-        .apply(
-            "DLQ: Write Severe errors to GCS",
-            MapElements.via(new StringDeadLetterQueueSanitizer()))
-        .setCoder(StringUtf8Coder.of())
-        .apply(
-            "Write To DLQ for severe errors",
-            DLQWriteTransform.WriteDLQ.newBuilder()
-                .withDlqDirectory(dlqManager.getSevereDlqDirectoryWithDateTime())
-                .withTmpDirectory((options).getDeadLetterQueueDirectory() + "/tmp_severe/")
-                .setIncludePaneInfo(true)
-                .build());
-
-    PCollection<FailsafeElement<String, String>> retryErrors =
-        sourceWriterOutput
-            .retryableErrors()
-            .setCoder(StringUtf8Coder.of())
-            .apply(
-                "Reshuffle4", Reshuffle.<String>viaRandomKey().withNumBuckets(reshuffleBucketSize))
-            .apply(
-                "Convert retryable errors from source writer to DLQ format",
-                ParDo.of(new ConvertChangeStreamErrorRecordToFailsafeElementFn()))
-            .setCoder(FailsafeElementCoder.of(StringUtf8Coder.of(), StringUtf8Coder.of()));
-
-    retryErrors
-        .apply(
-            "DLQ: Write retryable Failures to GCS",
-            MapElements.via(new StringDeadLetterQueueSanitizer()))
-        .setCoder(StringUtf8Coder.of())
-        .apply(
-            "Write To DLQ for retryable errors",
-            DLQWriteTransform.WriteDLQ.newBuilder()
-                .withDlqDirectory(dlqManager.getRetryDlqDirectoryWithDateTime())
-                .withTmpDirectory(options.getDeadLetterQueueDirectory() + "/tmp_retry/")
-                .setIncludePaneInfo(true)
-                .build());
-
-    PCollection<FailsafeElement<String, String>> skippedRecords =
-        sourceWriterOutput
-            .skippedSourceWrites()
-            .setCoder(StringUtf8Coder.of())
-            .apply(
-                "Reshuffle5", Reshuffle.<String>viaRandomKey().withNumBuckets(reshuffleBucketSize))
-            .apply(
-                "Convert skipped records from source writer to DLQ format",
-                ParDo.of(new ConvertChangeStreamErrorRecordToFailsafeElementFn()))
-            .setCoder(FailsafeElementCoder.of(StringUtf8Coder.of(), StringUtf8Coder.of()));
-
-    skippedRecords
-        .apply(
-            "Write skipped records to GCS", MapElements.via(new StringDeadLetterQueueSanitizer()))
-        .setCoder(StringUtf8Coder.of())
-        .apply(
-            "Writing skipped records to GCS",
-            DLQWriteTransform.WriteDLQ.newBuilder()
-                .withDlqDirectory(
-                    options.getDeadLetterQueueDirectory() + "/" + options.getSkipDirectoryName())
-                .withTmpDirectory(options.getDeadLetterQueueDirectory() + "/tmp_skip/")
-                .setIncludePaneInfo(true)
-                .build());
+    pipeline.apply(
+        getReadChangeStreamDoFn(
+            options, spannerConfig)); // This emits PCollection<DataChangeRecord> which is Spanner
 
     return pipeline.run();
   }
