@@ -111,12 +111,18 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
                 .filter(i -> i.name().equals(indexName))
                 .findFirst()
                 .orElse(null);
-        if (index != null && index.unique()) {
+        // Ignore PRIMARY_KEY and only include unique indices
+        if (index != null && index.unique() && !"PRIMARY_KEY".equalsIgnoreCase(index.name())) {
           uniqueKeysBuilder.add(
               DataGeneratorUniqueKey.builder()
                   .name(index.name())
                   .keyColumns(
                       index.indexColumns().stream()
+                          .filter(
+                              c ->
+                                  c.order()
+                                      != com.google.cloud.teleport.v2.spanner.ddl.IndexColumn.Order
+                                          .STORING)
                           .map(com.google.cloud.teleport.v2.spanner.ddl.IndexColumn::name)
                           .collect(ImmutableList.toImmutableList()))
                   .build());

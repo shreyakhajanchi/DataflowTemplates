@@ -148,4 +148,70 @@ public class SpannerSchemaFetcherTest {
     assertEquals(1, childResult.uniqueKeys().size());
     assertEquals("uk_uniqueVal", childResult.uniqueKeys().get(0).name());
   }
+
+  @Test
+  public void testGetSchemaWithPrimaryKeyAndStoringColumns() throws IOException {
+    doReturn(spannerAccessor).when(fetcher).getSpannerAccessor(any(SpannerConfig.class));
+    doReturn(scanner).when(fetcher).getInformationSchemaScanner(spannerAccessor);
+
+    com.google.cloud.teleport.v2.spanner.ddl.Index.Builder pkIndexBuilder =
+        com.google.cloud.teleport.v2.spanner.ddl.Index.builder()
+            .name("PRIMARY_KEY")
+            .table("Table")
+            .unique(true);
+    pkIndexBuilder
+        .columns()
+        .set(
+            com.google.cloud.teleport.v2.spanner.ddl.IndexColumn.create(
+                "id", com.google.cloud.teleport.v2.spanner.ddl.IndexColumn.Order.ASC));
+
+    com.google.cloud.teleport.v2.spanner.ddl.Index.Builder storingIndexBuilder =
+        com.google.cloud.teleport.v2.spanner.ddl.Index.builder()
+            .name("idx_unique_storing")
+            .table("Table")
+            .unique(true);
+    storingIndexBuilder
+        .columns()
+        .set(
+            com.google.cloud.teleport.v2.spanner.ddl.IndexColumn.create(
+                "uniqueCol", com.google.cloud.teleport.v2.spanner.ddl.IndexColumn.Order.ASC))
+        .set(
+            com.google.cloud.teleport.v2.spanner.ddl.IndexColumn.create(
+                "storedCol", com.google.cloud.teleport.v2.spanner.ddl.IndexColumn.Order.STORING));
+
+    com.google.cloud.teleport.v2.spanner.ddl.Table table =
+        com.google.cloud.teleport.v2.spanner.ddl.Table.builder()
+            .name("Table")
+            .column("id")
+            .parseType("INT64")
+            .endColumn()
+            .column("uniqueCol")
+            .parseType("STRING(MAX)")
+            .endColumn()
+            .column("storedCol")
+            .parseType("STRING(MAX)")
+            .endColumn()
+            .primaryKeys(ImmutableList.of())
+            .indexes(ImmutableList.of("PRIMARY_KEY", "idx_unique_storing"))
+            .indexObjects(ImmutableList.of(pkIndexBuilder.build(), storingIndexBuilder.build()))
+            .build();
+
+    Ddl.Builder builder = Ddl.builder();
+    builder.addTable(table);
+    when(scanner.scan()).thenReturn(builder.build());
+
+    DataGeneratorSchema result = fetcher.getSchema();
+
+    assertEquals(1, result.tables().size());
+    com.google.cloud.teleport.v2.templates.model.DataGeneratorTable tableResult =
+        result.tables().get("Table");
+
+    // PRIMARY_KEY index should be ignored, so only 1 unique key should be present
+    assertEquals(1, tableResult.uniqueKeys().size());
+    assertEquals("idx_unique_storing", tableResult.uniqueKeys().get(0).name());
+
+    // content of the unique key should NOT contain storedCol
+    assertEquals(1, tableResult.uniqueKeys().get(0).keyColumns().size());
+    assertEquals("uniqueCol", tableResult.uniqueKeys().get(0).keyColumns().get(0));
+  }
 }
