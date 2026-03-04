@@ -84,6 +84,14 @@ public class MySqlInformationSchemaScanner implements SourceSchemaScanner {
     List<String> primaryKeys = scanPrimaryKeys(tableName, schema);
     tableBuilder.primaryKeyColumns(com.google.common.collect.ImmutableList.copyOf(primaryKeys));
 
+    // Scan unique keys
+    List<SourceUniqueKey> uniqueKeys = scanUniqueKeys(tableName, schema);
+    tableBuilder.uniqueKeys(com.google.common.collect.ImmutableList.copyOf(uniqueKeys));
+
+    // Scan foreign keys
+    List<SourceForeignKey> foreignKeys = scanForeignKeys(tableName, schema);
+    tableBuilder.foreignKeys(com.google.common.collect.ImmutableList.copyOf(foreignKeys));
+
     return tableBuilder.build();
   }
 
@@ -158,5 +166,87 @@ public class MySqlInformationSchemaScanner implements SourceSchemaScanner {
       }
     }
     return primaryKeys;
+  }
+
+  private List<SourceUniqueKey> scanUniqueKeys(String tableName, String schema)
+      throws SQLException {
+    Map<String, List<String>> uniqueKeyColumns = new java.util.HashMap<>();
+    String query =
+        String.format(
+            "SELECT index_name, column_name "
+                + "FROM information_schema.statistics "
+                + "WHERE table_schema = '%s' AND table_name = '%s' "
+                + "AND non_unique = 0 AND index_name != 'PRIMARY' "
+                + "ORDER BY index_name, seq_in_index",
+            schema, tableName);
+
+    try (Statement stmt = connection.createStatement();
+        ResultSet rs = stmt.executeQuery(query)) {
+      while (rs.next()) {
+        String indexName = rs.getString("index_name");
+        String columnName = rs.getString("column_name");
+        uniqueKeyColumns.computeIfAbsent(indexName, k -> new ArrayList<>()).add(columnName);
+      }
+    }
+
+    List<SourceUniqueKey> uniqueKeys = new ArrayList<>();
+    for (Map.Entry<String, List<String>> entry : uniqueKeyColumns.entrySet()) {
+      uniqueKeys.add(
+          SourceUniqueKey.builder()
+              .name(entry.getKey())
+              .keyColumns(com.google.common.collect.ImmutableList.copyOf(entry.getValue()))
+              .build());
+    }
+    return uniqueKeys;
+  }
+
+  private List<SourceForeignKey> scanForeignKeys(String tableName, String schema)
+      throws SQLException {
+    Map<String, SourceForeignKey.Builder> fkBuilders = new java.util.HashMap<>();
+    Map<String, List<String>> keyColsMap = new java.util.HashMap<>();
+    Map<String, List<String>> refColsMap = new java.util.HashMap<>();
+
+    String query =
+        String.format(
+            "SELECT constraint_name, table_name, column_name, referenced_table_name, referenced_column_name "
+                + "FROM information_schema.key_column_usage "
+                + "WHERE table_schema = '%s' AND table_name = '%s' "
+                + "AND referenced_table_name IS NOT NULL "
+                + "ORDER BY constraint_name, ordinal_position",
+            schema, tableName);
+
+    try (Statement stmt = connection.createStatement();
+        ResultSet rs = stmt.executeQuery(query)) {
+      while (rs.next()) {
+        String constraintName = rs.getString("constraint_name");
+        String columnName = rs.getString("column_name");
+        String referencedTable = rs.getString("referenced_table_name");
+        String referencedColumn = rs.getString("referenced_column_name");
+
+        if (!fkBuilders.containsKey(constraintName)) {
+          fkBuilders.put(
+              constraintName,
+              SourceForeignKey.builder().name(constraintName).referencedTable(referencedTable));
+          keyColsMap.put(constraintName, new ArrayList<>());
+          refColsMap.put(constraintName, new ArrayList<>());
+        }
+
+        keyColsMap.get(constraintName).add(columnName);
+        refColsMap.get(constraintName).add(referencedColumn);
+      }
+    }
+
+    List<SourceForeignKey> foreignKeys = new ArrayList<>();
+    for (Map.Entry<String, SourceForeignKey.Builder> entry : fkBuilders.entrySet()) {
+      String fkName = entry.getKey();
+      foreignKeys.add(
+          entry
+              .getValue()
+              .keyColumns(com.google.common.collect.ImmutableList.copyOf(keyColsMap.get(fkName)))
+              .referencedColumns(
+                  com.google.common.collect.ImmutableList.copyOf(refColsMap.get(fkName)))
+              .build());
+    }
+    return foreignKeys;
   }
 }
