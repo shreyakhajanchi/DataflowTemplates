@@ -17,17 +17,13 @@ package com.google.cloud.teleport.v2.templates.transforms;
 
 import com.github.javafaker.Faker;
 import com.google.cloud.ByteArray;
-import com.google.cloud.Timestamp;
 import com.google.cloud.spanner.Mutation;
 import com.google.cloud.spanner.Value;
 import com.google.cloud.teleport.v2.templates.DataGeneratorOptions;
-import com.google.cloud.teleport.v2.templates.common.DataGeneratorAbstractions.DataGeneratorColumn;
-import com.google.cloud.teleport.v2.templates.common.DataGeneratorAbstractions.DataGeneratorForeignKey;
-import com.google.cloud.teleport.v2.templates.common.DataGeneratorAbstractions.DataGeneratorTable;
-import com.google.cloud.teleport.v2.templates.common.DataGeneratorAbstractions.LogicalType;
-import com.google.cloud.teleport.v2.templates.common.DataGeneratorAbstractions.Row;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
+import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
+import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
 import com.google.cloud.teleport.v2.templates.utils.DataGeneratorUtils;
 import com.google.cloud.teleport.v2.templates.writer.DataWriter;
@@ -47,6 +43,7 @@ import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.PDone;
+import org.apache.beam.sdk.values.Row;
 import org.joda.time.Instant;
 
 /**
@@ -57,12 +54,10 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
 
   private final String sinkOptionsPath;
   private final Integer batchSize;
-  private final PCollectionView<Map<String, DataGeneratorTable>> schemaView;
+  private final PCollectionView<DataGeneratorSchema> schemaView;
 
   public BatchAndWrite(
-      String sinkOptionsPath,
-      Integer batchSize,
-      PCollectionView<Map<String, DataGeneratorTable>> schemaView) {
+      String sinkOptionsPath, Integer batchSize, PCollectionView<DataGeneratorSchema> schemaView) {
     this.sinkOptionsPath = sinkOptionsPath;
     this.batchSize = batchSize;
     this.schemaView = schemaView;
@@ -80,11 +75,11 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
   static class BatchAndWriteFn extends DoFn<KV<String, Row>, Void> {
     private final String sinkOptionsPath;
     private final Integer configuredBatchSize;
-    private final PCollectionView<Map<String, DataGeneratorTable>> schemaView;
+    private final PCollectionView<DataGeneratorSchema> schemaView;
     private final int batchSize;
     protected transient DataWriter writer;
     protected transient Faker faker;
-    private transient Map<String, DataGeneratorTable> schemaMap;
+    private transient DataGeneratorSchema schema;
     // Buffer: TableName -> List of Mutations
     private transient Map<String, List<Mutation>> buffers;
     // Map to keep track of DataGeneratorTable objects for flushing
@@ -96,22 +91,22 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
     private final Counter recordsWritten = Metrics.counter(BatchAndWriteFn.class, "recordsWritten");
 
     public BatchAndWriteFn(
-        DataGeneratorOptions options, PCollectionView<Map<String, DataGeneratorTable>> schemaView) {
+        DataGeneratorOptions options, PCollectionView<DataGeneratorSchema> schemaView) {
       this.sinkOptionsPath = options.getSinkOptions();
       this.configuredBatchSize = options.getBatchSize();
       this.schemaView = schemaView;
-      this.schemaMap = null;
+      this.schema = null;
       this.batchSize = options.getBatchSize() != null ? options.getBatchSize() : 100;
     }
 
     public BatchAndWriteFn(
         String sinkOptionsPath,
         Integer batchSize,
-        PCollectionView<Map<String, DataGeneratorTable>> schemaView) {
+        PCollectionView<DataGeneratorSchema> schemaView) {
       this.sinkOptionsPath = sinkOptionsPath;
       this.configuredBatchSize = batchSize;
       this.schemaView = schemaView;
-      this.schemaMap = null;
+      this.schema = null;
       this.batchSize = batchSize != null ? batchSize : 100;
     }
 
@@ -153,12 +148,12 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
 
     @ProcessElement
     public void processElement(ProcessContext c) {
-      if (schemaMap == null) {
-        schemaMap = c.sideInput(schemaView);
+      if (schema == null) {
+        schema = c.sideInput(schemaView);
       }
       String tableName = c.element().getKey();
       Row row = c.element().getValue();
-      DataGeneratorTable table = schemaMap.get(tableName);
+      DataGeneratorTable table = schema.tables().get(tableName);
 
       if (table == null) {
         // LOG ERROR or add to DLQ
@@ -185,7 +180,6 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       // 1. Generate and Buffer Mutation for current record
       Mutation mutation = rowToMutation(table, fullRow);
       buffers.computeIfAbsent(tableName, k -> new ArrayList<>()).add(mutation);
-
       if (buffers.get(tableName).size() >= batchSize) {
         flush(tableName);
       }
@@ -193,7 +187,7 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       // 2. Process Children (Cascading Generation)
       if (table.children() != null && !table.children().isEmpty()) {
         for (String childTableName : table.children()) {
-          DataGeneratorTable childTable = schemaMap.get(childTableName);
+          DataGeneratorTable childTable = schema.tables().get(childTableName);
           if (childTable != null) {
             generateAndWriteChildren(table, fullRow, childTable);
           } else {
@@ -358,7 +352,6 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
     private void flush(String tableName) {
       List<Mutation> batch = buffers.get(tableName);
       if (batch != null && !batch.isEmpty()) {
-        System.out.println("Flushing table: " + tableName + ", size: " + batch.size());
         writer.write(batch, tableMap.get(tableName));
         batchesWritten.inc();
         recordsWritten.inc(batch.size());
@@ -486,7 +479,9 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
           if (value instanceof Instant) {
             builder
                 .set(columnName)
-                .to(Timestamp.ofTimeMicroseconds(((Instant) value).getMillis() * 1000));
+                .to(
+                    com.google.cloud.Timestamp.ofTimeMicroseconds(
+                        ((Instant) value).getMillis() * 1000));
           } else {
             builder.set(columnName).to(value.toString());
           }

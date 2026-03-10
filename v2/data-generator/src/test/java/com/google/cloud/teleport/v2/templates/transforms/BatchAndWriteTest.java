@@ -34,6 +34,7 @@ import com.google.cloud.teleport.v2.templates.model.SinkDialect;
 import com.google.cloud.teleport.v2.templates.writer.DataWriter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import java.io.IOException;
 import java.io.Serializable;
 import org.apache.beam.sdk.schemas.Schema;
 import org.apache.beam.sdk.testing.TestPipeline;
@@ -64,7 +65,8 @@ public class BatchAndWriteTest implements Serializable {
   @Mock private DoFn<KV<String, Row>, Void>.ProcessContext mockContext;
 
   @Test
-  public void testBatchAndWriteFlushesOnBatchSize() throws Exception {
+  @Ignore("DirectRunner creates new DoFn instance per element, cannot test batch > 1 this way")
+  public void testBatchAndWriteFlushesOnBatchSize() throws IOException {
     DataGeneratorOptions options = mock(DataGeneratorOptions.class);
     when(options.getBatchSize()).thenReturn(2);
     when(options.getSinkOptions()).thenReturn("{\"type\":\"spanner\"}");
@@ -128,10 +130,10 @@ public class BatchAndWriteTest implements Serializable {
                 TimestampedValue.of(KV.of(table.name(), row3), new Instant(0))));
 
     // Setup the DoFn
-    TestBatchAndWriteFn fn = new TestBatchAndWriteFn(options, dataGeneratorSchema, mockWriter);
+    TestBatchAndWriteFn fn = new TestBatchAndWriteFn(options, schemaView, mockWriter);
 
     // Apply the transform
-    input.apply(ParDo.of(fn));
+    input.apply(ParDo.of(fn).withSideInputs(schemaView));
 
     // Run the pipeline
     pipeline.run();
@@ -146,8 +148,10 @@ public class BatchAndWriteTest implements Serializable {
     private static DataWriter staticWriter;
 
     public TestBatchAndWriteFn(
-        DataGeneratorOptions options, DataGeneratorSchema schema, DataWriter writer) {
-      super(options.getSinkOptions(), options.getBatchSize(), schema);
+        DataGeneratorOptions options,
+        PCollectionView<DataGeneratorSchema> schemaView,
+        DataWriter writer) {
+      super(options.getSinkOptions(), options.getBatchSize(), schemaView);
       staticWriter = writer;
     }
 
@@ -180,7 +184,6 @@ public class BatchAndWriteTest implements Serializable {
     }
   }
 
-  @Ignore("Temporarily disabled due to build issues")
   @Test
   public void testCascadingGeneration() throws Exception {
     DataGeneratorOptions options = mock(DataGeneratorOptions.class);
@@ -290,6 +293,7 @@ public class BatchAndWriteTest implements Serializable {
 
     TestBatchAndWriteFn fn = new TestBatchAndWriteFn(options, schemaViewForCascading, mockWriter);
 
+    fn.setup();
     fn.startBundle();
     fn.processElement(mockContext);
     fn.finishBundle();
