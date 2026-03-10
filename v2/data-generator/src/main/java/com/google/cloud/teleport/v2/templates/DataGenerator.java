@@ -18,10 +18,25 @@ package com.google.cloud.teleport.v2.templates;
 import com.google.cloud.teleport.metadata.Template;
 import com.google.cloud.teleport.metadata.TemplateCategory;
 import com.google.cloud.teleport.v2.common.UncaughtExceptionLogger;
+import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
+import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
+import com.google.cloud.teleport.v2.templates.transforms.BatchAndWrite;
+import com.google.cloud.teleport.v2.templates.transforms.GeneratePrimaryKey;
+import com.google.cloud.teleport.v2.templates.transforms.GenerateTicks;
 import com.google.cloud.teleport.v2.templates.transforms.SchemaLoader;
+import com.google.cloud.teleport.v2.templates.transforms.SelectTable;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
+import org.apache.beam.sdk.transforms.DoFn;
+import org.apache.beam.sdk.transforms.MapElements;
+import org.apache.beam.sdk.transforms.ParDo;
+import org.apache.beam.sdk.transforms.Reshuffle;
+import org.apache.beam.sdk.transforms.SimpleFunction;
+import org.apache.beam.sdk.values.KV;
+import org.apache.beam.sdk.values.PCollection;
+import org.apache.beam.sdk.values.PCollectionView;
+import org.apache.beam.sdk.values.Row;
 
 @Template(
     name = "Data_Generator",
@@ -46,7 +61,51 @@ public class DataGenerator {
     Pipeline pipeline = Pipeline.create(options);
 
     // Fetch schema as side input
-    pipeline.apply("LoadSchema", new SchemaLoader(options));
+    PCollectionView<DataGeneratorSchema> schemaView =
+        pipeline.apply("LoadSchema", new SchemaLoader(options));
+
+    // Generate ticks based on schema QPS
+    // Generate ticks based on schema QPS
+    PCollection<DataGeneratorTable> ticks =
+        pipeline
+            .apply("TriggerTick", org.apache.beam.sdk.transforms.Create.of(new byte[0]))
+            .apply("GenerateTicks", new GenerateTicks(options, schemaView))
+            .apply("SelectTable", new SelectTable(schemaView));
+
+    // Generate Primary Keys
+    PCollection<KV<String, Row>> pendingRows =
+        ticks.apply("GeneratePrimaryKey", new GeneratePrimaryKey());
+
+    // Reshuffle based on Hash(TableName + PK) to ensure same PK goes to same worker
+    // Key = Hash(TableName + PK) % 5000
+    PCollection<KV<String, Row>> reshuffledRows =
+        pendingRows
+            .apply(
+                "MapToReshuffleKey",
+                ParDo.of(
+                    new DoFn<KV<String, Row>, KV<Integer, KV<String, Row>>>() {
+                      @ProcessElement
+                      public void processElement(ProcessContext c) {
+                        String tableName = c.element().getKey();
+                        Row row = c.element().getValue();
+                        int hash = (tableName + row.toString()).hashCode();
+                        c.output(KV.of(Math.abs(hash % 5000), c.element()));
+                      }
+                    }))
+            .apply("Reshuffle", Reshuffle.of())
+            .apply(
+                "StripReshuffleKey",
+                MapElements.via(
+                    new SimpleFunction<KV<Integer, KV<String, Row>>, KV<String, Row>>() {
+                      @Override
+                      public KV<String, Row> apply(KV<Integer, KV<String, Row>> element) {
+                        return element.getValue();
+                      }
+                    }));
+
+    reshuffledRows.apply(
+        "BatchAndWrite",
+        new BatchAndWrite(options.getSinkOptions(), options.getBatchSize(), schemaView));
 
     return pipeline.run();
   }

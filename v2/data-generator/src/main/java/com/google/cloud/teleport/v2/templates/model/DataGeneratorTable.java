@@ -19,9 +19,12 @@ import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
 import java.io.Serializable;
 import javax.annotation.Nullable;
+import org.apache.beam.sdk.coders.DefaultCoder;
+import org.apache.beam.sdk.coders.SerializableCoder;
 
 /** Represents a table in the data generator schema. */
 @AutoValue
+@DefaultCoder(SerializableCoder.class)
 public abstract class DataGeneratorTable implements Serializable {
 
   /** The name of the table. */
@@ -46,9 +49,23 @@ public abstract class DataGeneratorTable implements Serializable {
   // TODO: Add fields for QPS and parent-child record ratio here once data config
   // is supported.
 
+  /** The target QPS for this table. */
+  public abstract int qps();
+
+  /** Whether this table is a root table. */
+  public abstract boolean isRoot();
+
+  /** The list of child tables. */
+  public abstract ImmutableList<String> children();
+
   public static Builder builder() {
-    return new AutoValue_DataGeneratorTable.Builder();
+    return new AutoValue_DataGeneratorTable.Builder()
+        .qps(1)
+        .isRoot(true)
+        .children(ImmutableList.of());
   }
+
+  public abstract Builder toBuilder();
 
   @AutoValue.Builder
   public abstract static class Builder {
@@ -63,6 +80,12 @@ public abstract class DataGeneratorTable implements Serializable {
     public abstract Builder foreignKeys(ImmutableList<DataGeneratorForeignKey> foreignKeys);
 
     public abstract Builder uniqueKeys(ImmutableList<DataGeneratorUniqueKey> uniqueKeys);
+
+    public abstract Builder qps(int qps);
+
+    public abstract Builder isRoot(boolean isRoot);
+
+    public abstract Builder children(ImmutableList<String> children);
 
     public abstract DataGeneratorTable build();
   }

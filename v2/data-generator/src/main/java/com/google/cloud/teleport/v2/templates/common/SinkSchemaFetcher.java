@@ -34,4 +34,11 @@ public interface SinkSchemaFetcher {
    * @throws IOException If an error occurs during fetching.
    */
   DataGeneratorSchema getSchema() throws IOException;
+
+  /**
+   * Sets the QPS (Queries Per Second) for the data generation.
+   *
+   * @param qps The target QPS.
+   */
+  void setQps(int qps);
 }

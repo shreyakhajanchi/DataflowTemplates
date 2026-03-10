@@ -21,6 +21,7 @@ import com.google.cloud.teleport.v2.templates.common.SinkSchemaFetcher;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.mysql.MySqlSchemaFetcher;
 import com.google.cloud.teleport.v2.templates.spanner.SpannerSchemaFetcher;
+import com.google.cloud.teleport.v2.templates.utils.SchemaUtils;
 import com.google.common.io.CharStreams;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -57,17 +58,21 @@ public class SchemaLoader extends PTransform<PBegin, PCollectionView<DataGenerat
         .apply("CreateSinkType", Create.of(options.getSinkType()))
         .apply(
             "FetchSchema",
-            ParDo.of(new FetchSchemaFn(options.getSinkType(), options.getSinkOptions())))
+            ParDo.of(
+                new FetchSchemaFn(
+                    options.getSinkType(), options.getSinkOptions(), options.getQps())))
         .apply("ViewAsSingleton", View.asSingleton());
   }
 
   static class FetchSchemaFn extends DoFn<SinkType, DataGeneratorSchema> {
     private final SinkType sinkType;
     private final String sinkOptionsPath;
+    private final int qps;
 
-    FetchSchemaFn(SinkType sinkType, String sinkOptionsPath) {
+    FetchSchemaFn(SinkType sinkType, String sinkOptionsPath, Integer qps) {
       this.sinkType = sinkType;
       this.sinkOptionsPath = sinkOptionsPath;
+      this.qps = qps != null ? qps : 1;
     }
 
     @ProcessElement
@@ -77,7 +82,9 @@ public class SchemaLoader extends PTransform<PBegin, PCollectionView<DataGenerat
         SinkSchemaFetcher fetcher = createFetcher(sinkType);
 
         fetcher.init(sinkOptionsPath, sinkOptionsJson);
+        fetcher.setQps(qps);
         DataGeneratorSchema schema = fetcher.getSchema();
+        schema = SchemaUtils.setSchemaDAG(schema);
         LOG.info("Fetched Schema: {}", schema);
         receiver.output(schema);
       } catch (IOException e) {

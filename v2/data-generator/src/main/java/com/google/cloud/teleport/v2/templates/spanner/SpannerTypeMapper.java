@@ -29,7 +29,6 @@ public class SpannerTypeMapper implements TypeMapper {
       return LogicalType.STRING;
     }
 
-    // 1. Better Sanitization: Handle both (MAX) and <INT64>
     String upperType = typeName.toUpperCase(Locale.ROOT).trim();
     int splitIdx =
         Math.min(
@@ -70,7 +69,6 @@ public class SpannerTypeMapper implements TypeMapper {
           return LogicalType.STRING;
       }
     } else if (dialect == SinkDialect.POSTGRESQL) {
-      // FIX: Cases must be UPPERCASE to match upperType
       switch (upperType) {
         case "BOOLEAN":
         case "BOOL":

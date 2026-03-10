@@ -39,6 +39,7 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
   private String projectId;
   private String instanceId;
   private String databaseId;
+  private int qps = 1;
   private final SpannerTypeMapper typeMapper = new SpannerTypeMapper();
 
   @Override
@@ -47,6 +48,11 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
     this.projectId = json.getString("projectId");
     this.instanceId = json.getString("instanceId");
     this.databaseId = json.getString("databaseId");
+  }
+
+  @Override
+  public void setQps(int qps) {
+    this.qps = qps;
   }
 
   @Override
@@ -140,6 +146,8 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
         .interleavedInTable(table.interleavingParent())
         .foreignKeys(fksBuilder.build())
         .uniqueKeys(uniqueKeysBuilder.build())
+        .isRoot(table.interleavingParent() == null)
+        .qps(qps)
         .build();
   }
 
@@ -158,8 +166,8 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
         .isGenerated(column.isGenerated())
         .originalType(column.typeString())
         .size(column.size() != null ? Long.valueOf(column.size()) : null)
-        .precision(null) // Precision not available in Spanner Column definition yet
-        .scale(null) // Scale not available in Spanner Column definition yet
+        .precision(null)
+        .scale(null)
         .build();
   }
 

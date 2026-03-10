@@ -34,6 +34,8 @@ public abstract class SourceColumn implements Serializable {
 
   public abstract boolean isPrimaryKey();
 
+  public abstract boolean isGenerated();
+
   @Nullable
   public abstract Long size();
 
@@ -52,6 +54,7 @@ public abstract class SourceColumn implements Serializable {
         .sourceType(sourceType)
         .isNullable(true)
         .isPrimaryKey(false)
+        .isGenerated(false)
         .columnOptions(ImmutableList.of());
   }
 
@@ -67,6 +70,8 @@ public abstract class SourceColumn implements Serializable {
     public abstract Builder isNullable(boolean isNullable);
 
     public abstract Builder isPrimaryKey(boolean isPrimaryKey);
+
+    public abstract Builder isGenerated(boolean isGenerated);
 
     public abstract Builder size(Long size);
 

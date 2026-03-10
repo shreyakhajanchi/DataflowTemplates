@@ -47,6 +47,7 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
   private String connectionUrl;
   private String username;
   private String password;
+  private int qps = 1;
   private final MySqlTypeMapper typeMapper = new MySqlTypeMapper();
 
   @Override
@@ -81,6 +82,11 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
       this.connectionUrl += "?" + firstShard.getConnectionProperties();
     }
     this.driverClassName = "com.mysql.cj.jdbc.Driver";
+  }
+
+  @Override
+  public void setQps(int qps) {
+    this.qps = qps;
   }
 
   @Override
@@ -152,6 +158,8 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
         .primaryKeys(table.primaryKeyColumns())
         .foreignKeys(foreignKeysBuilder.build())
         .uniqueKeys(uniqueKeysBuilder.build())
+        .isRoot(true)
+        .qps(qps)
         .build();
   }
 
@@ -161,7 +169,7 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
         .logicalType(typeMapper.getLogicalType(column.type(), dialect))
         .isNullable(column.isNullable())
         .isPrimaryKey(column.isPrimaryKey())
-        .isGenerated(false) // Todo: Scanner might need update to capture this if needed
+        .isGenerated(column.isGenerated())
         .originalType(column.type())
         .size(column.size())
         .precision(column.precision())

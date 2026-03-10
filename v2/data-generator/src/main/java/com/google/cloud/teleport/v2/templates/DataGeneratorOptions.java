@@ -17,9 +17,10 @@ package com.google.cloud.teleport.v2.templates;
 
 import com.google.cloud.teleport.metadata.TemplateParameter;
 import com.google.cloud.teleport.v2.options.CommonTemplateOptions;
+import org.apache.beam.sdk.extensions.gcp.options.GcpOptions;
 import org.apache.beam.sdk.options.Validation.Required;
 
-public interface DataGeneratorOptions extends CommonTemplateOptions {
+public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions {
 
   @TemplateParameter.Enum(
       order = 1,
@@ -45,6 +46,37 @@ public interface DataGeneratorOptions extends CommonTemplateOptions {
   String getSinkOptions();
 
   void setSinkOptions(String value);
+
+  @TemplateParameter.Integer(
+      order = 3,
+      optional = true,
+      description = "QPS per partition",
+      helpText =
+          "The target QPS per partition. Used to shard the tick generation for high throughput. Default is 1000.")
+  @org.apache.beam.sdk.options.Default.Integer(1000)
+  Integer getQpsPerPartition();
+
+  void setQpsPerPartition(Integer value);
+
+  @TemplateParameter.Integer(
+      order = 4,
+      optional = true,
+      description = "Batch Size",
+      helpText = "The batch size for writing to the sink. Default is 100.")
+  @org.apache.beam.sdk.options.Default.Integer(100)
+  Integer getBatchSize();
+
+  void setBatchSize(Integer value);
+
+  @TemplateParameter.Integer(
+      order = 5,
+      optional = true,
+      description = "QPS per table",
+      helpText = "The target QPS for each table. Default is 1.")
+  @org.apache.beam.sdk.options.Default.Integer(1)
+  Integer getQps();
+
+  void setQps(Integer value);
 
   enum SinkType {
     SPANNER,
