@@ -53,7 +53,8 @@ public class SchemaLoaderTest {
     when(options.getSinkType()).thenReturn(SinkType.SPANNER);
     when(options.getSinkOptions()).thenReturn("options");
 
-    SchemaLoader schemaLoader = new SchemaLoader(options);
+    SchemaLoader schemaLoader =
+        new SchemaLoader(options.getSinkType(), options.getSinkOptions(), options.getQps());
     PCollectionView<DataGeneratorSchema> view = pipeline.apply(schemaLoader);
 
     assertNotNull(view);

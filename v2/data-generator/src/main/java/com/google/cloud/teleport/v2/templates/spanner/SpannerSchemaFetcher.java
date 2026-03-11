@@ -16,7 +16,7 @@
 package com.google.cloud.teleport.v2.templates.spanner;
 
 import com.google.cloud.teleport.v2.spanner.ddl.Ddl;
-import com.google.cloud.teleport.v2.spanner.ddl.InformationSchemaScanner;
+import com.google.cloud.teleport.v2.spanner.migrations.spanner.SpannerSchema;
 import com.google.cloud.teleport.v2.templates.common.SinkSchemaFetcher;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
@@ -39,7 +39,7 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
   private String projectId;
   private String instanceId;
   private String databaseId;
-  private int qps = 1;
+  private int qps;
   private final SpannerTypeMapper typeMapper = new SpannerTypeMapper();
 
   @Override
@@ -62,12 +62,8 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
             .withProjectId(StaticValueProvider.of(projectId))
             .withInstanceId(StaticValueProvider.of(instanceId))
             .withDatabaseId(StaticValueProvider.of(databaseId));
-
-    try (SpannerAccessor spannerAccessor = getSpannerAccessor(spannerConfig)) {
-      InformationSchemaScanner scanner = getInformationSchemaScanner(spannerAccessor);
-      Ddl ddl = scanner.scan();
-      return mapToDataGeneratorSchema(ddl);
-    }
+    Ddl ddl = fetchDdl(spannerConfig);
+    return mapToDataGeneratorSchema(ddl);
   }
 
   private DataGeneratorSchema mapToDataGeneratorSchema(Ddl ddl) {
@@ -175,7 +171,7 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
     return SpannerAccessor.getOrCreate(spannerConfig);
   }
 
-  protected InformationSchemaScanner getInformationSchemaScanner(SpannerAccessor spannerAccessor) {
-    return new InformationSchemaScanner(spannerAccessor.getDatabaseClient().singleUse());
+  protected Ddl fetchDdl(SpannerConfig spannerConfig) {
+    return SpannerSchema.getInformationSchemaAsDdl(spannerConfig);
   }
 }

@@ -47,7 +47,7 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
   private String connectionUrl;
   private String username;
   private String password;
-  private int qps = 1;
+  private int qps;
   private final MySqlTypeMapper typeMapper = new MySqlTypeMapper();
 
   @Override
@@ -72,8 +72,8 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
     // Grab the first dbName for the connection if mapped, otherwise it connects at
     // root
     String dbName = "";
-    if (!firstShard.getDbNameToLogicalShardIdMap().isEmpty()) {
-      dbName = firstShard.getDbNameToLogicalShardIdMap().keySet().iterator().next();
+    if (!firstShard.getDbName().isEmpty()) {
+      dbName = firstShard.getDbName();
     }
 
     this.connectionUrl = String.format("jdbc:mysql://%s:%s/%s", host, port, dbName);
@@ -166,7 +166,7 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
   private DataGeneratorColumn mapSourceColumn(SourceColumn column, SinkDialect dialect) {
     return DataGeneratorColumn.builder()
         .name(column.name())
-        .logicalType(typeMapper.getLogicalType(column.type(), dialect))
+        .logicalType(typeMapper.getLogicalType(column.type(), dialect, column.size()))
         .isNullable(column.isNullable())
         .isPrimaryKey(column.isPrimaryKey())
         .isGenerated(column.isGenerated())

@@ -41,51 +41,78 @@ public class SchemaUtils {
    */
   public static DataGeneratorSchema setSchemaDAG(DataGeneratorSchema schema) {
     Map<String, DataGeneratorTable> tableMap = schema.tables();
-    Map<String, List<String>> parentToChildren =
-        new HashMap<>(); // Parent Name -> List of Child Names
-    Set<String> allChildren = new HashSet<>();
+    Map<String, List<String>> parentToSequenceChild = new HashMap<>();
+    Set<String> hasSequenceParent = new HashSet<>();
 
-    // 1. Identify Relationships
-    for (DataGeneratorTable table : tableMap.values()) {
-      String tableName = table.name();
-      String bestParent = null;
-      int minParentQps = Integer.MAX_VALUE;
+    // 1. Build Dependency Chains for Each Table
+    for (DataGeneratorTable childTable : tableMap.values()) {
+      String childName = childTable.name();
 
-      // Check Interleaving (Strict Parent)
-      if (table.interleavedInTable() != null) {
-        bestParent = table.interleavedInTable();
-      } else {
-        // Check Foreign Keys
-        for (DataGeneratorForeignKey fk : table.foreignKeys()) {
-          String parentName = fk.referencedTable();
-          DataGeneratorTable parentTable = tableMap.get(parentName);
-          if (parentTable != null) {
-            // If multiple parents, pick the one with lower QPS to avoid bottlenecking
-            // or effectively, the "main" driver.
-            if (parentTable.qps() < minParentQps) {
-              minParentQps = parentTable.qps();
-              bestParent = parentName;
-            }
-          }
+      // Interleaved Parent takes precedence
+      if (childTable.interleavedInTable() != null) {
+        String parentName = childTable.interleavedInTable();
+        if (tableMap.containsKey(parentName)) {
+          parentToSequenceChild.computeIfAbsent(parentName, k -> new ArrayList<>()).add(childName);
+          hasSequenceParent.add(childName);
+        }
+        continue; // Interleaving defines the sole sequence parent
+      }
+
+      // Collect Foreign Key Parents
+      List<DataGeneratorTable> fkParents = new ArrayList<>();
+      for (DataGeneratorForeignKey fk : childTable.foreignKeys()) {
+        DataGeneratorTable parentTable = tableMap.get(fk.referencedTable());
+        if (parentTable != null) {
+          fkParents.add(parentTable);
         }
       }
 
-      if (bestParent != null) {
-        parentToChildren.computeIfAbsent(bestParent, k -> new ArrayList<>()).add(tableName);
-        allChildren.add(tableName);
+      if (fkParents.isEmpty()) {
+        continue; // No parents for this table
       }
+
+      // Sort FK Parents by QPS
+      fkParents.sort(java.util.Comparator.comparingInt(DataGeneratorTable::qps));
+
+      // Chain the FK Parents: P1 -> P2 -> ... -> Pn -> Child
+      for (int i = 0; i < fkParents.size() - 1; i++) {
+        String currentParentName = fkParents.get(i).name();
+        String nextParentName = fkParents.get(i + 1).name();
+        // Avoid adding duplicate dependencies if a table is part of multiple chains
+        List<String> currentChildren =
+            parentToSequenceChild.computeIfAbsent(currentParentName, k -> new ArrayList<>());
+        if (!currentChildren.contains(nextParentName)) {
+          currentChildren.add(nextParentName);
+        }
+        hasSequenceParent.add(nextParentName);
+      }
+
+      // Link the last parent in the chain to the child table
+      String lastParentName = fkParents.get(fkParents.size() - 1).name();
+      List<String> lastParentChildren =
+          parentToSequenceChild.computeIfAbsent(lastParentName, k -> new ArrayList<>());
+      if (!lastParentChildren.contains(childName)) {
+        lastParentChildren.add(childName);
+      }
+      hasSequenceParent.add(childName);
     }
 
-    // 2. Update Tables with Children Names and isRoot
+    // 2. Update Tables with Sequence Children and isRoot
     ImmutableMap.Builder<String, DataGeneratorTable> newTablesBuilder = ImmutableMap.builder();
     for (DataGeneratorTable table : tableMap.values()) {
       String tableName = table.name();
-      List<String> childrenNames = parentToChildren.getOrDefault(tableName, ImmutableList.of());
-      boolean isRoot = !allChildren.contains(tableName);
+      List<String> sequenceChildren =
+          parentToSequenceChild.getOrDefault(tableName, ImmutableList.of());
+      boolean isRoot = !hasSequenceParent.contains(tableName);
 
       newTablesBuilder.put(
           tableName,
-          table.toBuilder().children(ImmutableList.copyOf(childrenNames)).isRoot(isRoot).build());
+          table.toBuilder()
+              .children(
+                  ImmutableList.copyOf(
+                      sequenceChildren)) // These are tables to generate AFTER this one
+              .isRoot(isRoot)
+              .build());
     }
 
     return DataGeneratorSchema.builder()

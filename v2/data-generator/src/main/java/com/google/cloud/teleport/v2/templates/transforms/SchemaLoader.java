@@ -15,7 +15,6 @@
  */
 package com.google.cloud.teleport.v2.templates.transforms;
 
-import com.google.cloud.teleport.v2.templates.DataGeneratorOptions;
 import com.google.cloud.teleport.v2.templates.DataGeneratorOptions.SinkType;
 import com.google.cloud.teleport.v2.templates.common.SinkSchemaFetcher;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
@@ -46,21 +45,21 @@ import org.slf4j.LoggerFactory;
 public class SchemaLoader extends PTransform<PBegin, PCollectionView<DataGeneratorSchema>> {
 
   private static final Logger LOG = LoggerFactory.getLogger(SchemaLoader.class);
-  private final DataGeneratorOptions options;
+  private final SinkType sinkType;
+  private final String sinkOptionsPath;
+  private final Integer qps;
 
-  public SchemaLoader(DataGeneratorOptions options) {
-    this.options = options;
+  public SchemaLoader(SinkType sinkType, String sinkOptionsPath, Integer qps) {
+    this.sinkType = sinkType;
+    this.sinkOptionsPath = sinkOptionsPath;
+    this.qps = qps;
   }
 
   @Override
   public PCollectionView<DataGeneratorSchema> expand(PBegin input) {
     return input
-        .apply("CreateSinkType", Create.of(options.getSinkType()))
-        .apply(
-            "FetchSchema",
-            ParDo.of(
-                new FetchSchemaFn(
-                    options.getSinkType(), options.getSinkOptions(), options.getQps())))
+        .apply("CreateSinkType", Create.of(sinkType))
+        .apply("FetchSchema", ParDo.of(new FetchSchemaFn(sinkType, sinkOptionsPath, qps)))
         .apply("ViewAsSingleton", View.asSingleton());
   }
 

@@ -81,7 +81,6 @@
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>
             <version>${mysql-connector-java.version}</version>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.google.cloud.teleport</groupId>

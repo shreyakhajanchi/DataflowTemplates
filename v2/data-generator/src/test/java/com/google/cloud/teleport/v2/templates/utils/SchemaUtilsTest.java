@@ -85,11 +85,8 @@ public class SchemaUtilsTest {
   }
 
   @Test
-  public void testDAGConstructionMultiParent() {
-    // P1 (100 QPS) -> Child
-    // P2 (10 QPS) -> Child
-    // Child should be child of P2 (Least QPS)
-
+  public void testDAGConstructionMultiParentChain() {
+    // P1 (10 QPS) -> P2 (100 QPS) -> Child
     DataGeneratorTable p1 =
         DataGeneratorTable.builder()
             .name("P1")
@@ -97,7 +94,7 @@ public class SchemaUtilsTest {
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .qps(100)
+            .qps(10)
             .isRoot(false)
             .build();
 
@@ -108,7 +105,7 @@ public class SchemaUtilsTest {
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .qps(10)
+            .qps(100)
             .isRoot(false)
             .build();
 
@@ -132,7 +129,7 @@ public class SchemaUtilsTest {
                         .referencedColumns(ImmutableList.of("id"))
                         .build()))
             .uniqueKeys(ImmutableList.of())
-            .qps(10)
+            .qps(200)
             .isRoot(false)
             .build();
 
@@ -149,14 +146,191 @@ public class SchemaUtilsTest {
     DataGeneratorTable newChild = dagSchema.tables().get("Child");
 
     assertTrue(newP1.isRoot());
-    assertTrue(newP2.isRoot());
+    assertFalse(newP2.isRoot());
     assertFalse(newChild.isRoot());
 
-    // P1 should NOT have Child in children list
-    assertEquals(0, newP1.children().size());
+    // P1 should have P2
+    assertEquals(1, newP1.children().size());
+    assertEquals("P2", newP1.children().get(0));
 
-    // P2 SHOULD have Child in children list
+    // P2 should have Child
     assertEquals(1, newP2.children().size());
     assertEquals("Child", newP2.children().get(0));
+
+    assertEquals(0, newChild.children().size());
+  }
+
+  @Test
+  public void testDAGConstructionInterleaving() {
+    // InterleavedParent -> Child (interleaved)
+    // OtherParent (1 QPS) -> Child (FK)
+    // Interleaving should take precedence.
+
+    DataGeneratorTable interleavedParent =
+        DataGeneratorTable.builder()
+            .name("InterleavedParent")
+            .qps(100)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .build();
+    DataGeneratorTable otherParent =
+        DataGeneratorTable.builder()
+            .name("OtherParent")
+            .qps(1)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .build();
+
+    DataGeneratorTable child =
+        DataGeneratorTable.builder()
+            .name("Child")
+            .interleavedInTable("InterleavedParent")
+            .foreignKeys(
+                ImmutableList.of(
+                    DataGeneratorForeignKey.builder()
+                        .name("fk_other")
+                        .keyColumns(ImmutableList.of("otherId"))
+                        .referencedTable("OtherParent")
+                        .referencedColumns(ImmutableList.of("id"))
+                        .build()))
+            .qps(10)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .build();
+
+    DataGeneratorSchema schema =
+        DataGeneratorSchema.builder()
+            .dialect(SinkDialect.GOOGLE_STANDARD_SQL)
+            .tables(
+                ImmutableMap.of(
+                    "InterleavedParent",
+                    interleavedParent,
+                    "OtherParent",
+                    otherParent,
+                    "Child",
+                    child))
+            .build();
+
+    DataGeneratorSchema dagSchema = SchemaUtils.setSchemaDAG(schema);
+
+    assertTrue(dagSchema.tables().get("InterleavedParent").isRoot());
+    assertTrue(dagSchema.tables().get("OtherParent").isRoot());
+    assertFalse(dagSchema.tables().get("Child").isRoot());
+
+    assertEquals(1, dagSchema.tables().get("InterleavedParent").children().size());
+    assertEquals("Child", dagSchema.tables().get("InterleavedParent").children().get(0));
+    assertEquals(0, dagSchema.tables().get("OtherParent").children().size());
+  }
+
+  @Test
+  public void testDAGConstructionGrandChild() {
+    // P1 -> P2 -> C1 -> GC1
+    // P2 -> C2
+    // P1 (10), P2 (100), C1 (20), C2 (30), GC1 (40)
+    // C1 now has parents P1 and P2
+
+    DataGeneratorTable p1 =
+        DataGeneratorTable.builder()
+            .name("P1")
+            .qps(10)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .build();
+    DataGeneratorTable p2 =
+        DataGeneratorTable.builder()
+            .name("P2")
+            .qps(100)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .build();
+    DataGeneratorTable c1 =
+        DataGeneratorTable.builder()
+            .name("C1")
+            .qps(20)
+            .foreignKeys(
+                ImmutableList.of(
+                    DataGeneratorForeignKey.builder()
+                        .name("fk_p1")
+                        .keyColumns(ImmutableList.of("p1Id"))
+                        .referencedTable("P1")
+                        .referencedColumns(ImmutableList.of("id"))
+                        .build(),
+                    DataGeneratorForeignKey.builder()
+                        .name("fk_p2_c1")
+                        .keyColumns(ImmutableList.of("p2Id"))
+                        .referencedTable("P2")
+                        .referencedColumns(ImmutableList.of("id"))
+                        .build()))
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .build();
+    DataGeneratorTable c2 =
+        DataGeneratorTable.builder()
+            .name("C2")
+            .qps(30)
+            .foreignKeys(
+                ImmutableList.of(
+                    DataGeneratorForeignKey.builder()
+                        .name("fk_p2")
+                        .keyColumns(ImmutableList.of("p2Id"))
+                        .referencedTable("P2")
+                        .referencedColumns(ImmutableList.of("id"))
+                        .build()))
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .build();
+    DataGeneratorTable gc1 =
+        DataGeneratorTable.builder()
+            .name("GC1")
+            .qps(40)
+            .foreignKeys(
+                ImmutableList.of(
+                    DataGeneratorForeignKey.builder()
+                        .name("fk_c1")
+                        .keyColumns(ImmutableList.of("c1Id"))
+                        .referencedTable("C1")
+                        .referencedColumns(ImmutableList.of("id"))
+                        .build()))
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .build();
+
+    DataGeneratorSchema schema =
+        DataGeneratorSchema.builder()
+            .dialect(SinkDialect.GOOGLE_STANDARD_SQL)
+            .tables(ImmutableMap.of("P1", p1, "P2", p2, "C1", c1, "C2", c2, "GC1", gc1))
+            .build();
+
+    DataGeneratorSchema dagSchema = SchemaUtils.setSchemaDAG(schema);
+
+    assertTrue(dagSchema.tables().get("P1").isRoot());
+    assertFalse(dagSchema.tables().get("P2").isRoot()); // P2 is now a sequence child of P1 for C1
+    assertFalse(dagSchema.tables().get("C1").isRoot());
+    assertFalse(dagSchema.tables().get("C2").isRoot());
+    assertFalse(dagSchema.tables().get("GC1").isRoot());
+
+    assertEquals(1, dagSchema.tables().get("P1").children().size());
+    assertEquals("P2", dagSchema.tables().get("P1").children().get(0)); // P1 -> P2 sequence
+
+    assertEquals(2, dagSchema.tables().get("P2").children().size());
+    assertTrue(dagSchema.tables().get("P2").children().contains("C1")); // P2 -> C1 sequence
+    assertTrue(dagSchema.tables().get("P2").children().contains("C2")); // P2 -> C2 direct
+
+    assertEquals(1, dagSchema.tables().get("C1").children().size());
+    assertEquals("GC1", dagSchema.tables().get("C1").children().get(0));
+    assertEquals(0, dagSchema.tables().get("C2").children().size());
+    assertEquals(0, dagSchema.tables().get("GC1").children().size());
   }
 }

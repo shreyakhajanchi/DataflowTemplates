@@ -18,9 +18,10 @@ package com.google.cloud.teleport.v2.templates;
 import com.google.cloud.teleport.metadata.TemplateParameter;
 import com.google.cloud.teleport.v2.options.CommonTemplateOptions;
 import org.apache.beam.sdk.extensions.gcp.options.GcpOptions;
+import org.apache.beam.sdk.options.StreamingOptions;
 import org.apache.beam.sdk.options.Validation.Required;
 
-public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions {
+public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions, StreamingOptions {
 
   @TemplateParameter.Enum(
       order = 1,
@@ -72,8 +73,8 @@ public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions 
       order = 5,
       optional = true,
       description = "QPS per table",
-      helpText = "The target QPS for each table. Default is 1.")
-  @org.apache.beam.sdk.options.Default.Integer(1)
+      helpText = "The target QPS for each table. Default is 1000.")
+  @org.apache.beam.sdk.options.Default.Integer(1000)
   Integer getQps();
 
   void setQps(Integer value);

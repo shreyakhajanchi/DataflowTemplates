@@ -15,9 +15,9 @@
  */
 package com.google.cloud.teleport.v2.templates.spanner;
 
+import com.google.cloud.teleport.v2.templates.common.TypeMapper;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
 import com.google.cloud.teleport.v2.templates.model.SinkDialect;
-import com.google.cloud.teleport.v2.templates.utils.TypeMapper;
 import java.util.Locale;
 
 /** TypeMapper implementation for Spanner types. */
@@ -42,8 +42,10 @@ public class SpannerTypeMapper implements TypeMapper {
     if (dialect == SinkDialect.GOOGLE_STANDARD_SQL) {
       switch (upperType) {
         case "BOOL":
+        case "BOOLEAN":
           return LogicalType.BOOLEAN;
         case "INT64":
+        case "INT":
           return LogicalType.INT64;
         case "FLOAT32":
         case "FLOAT64":
@@ -61,10 +63,7 @@ public class SpannerTypeMapper implements TypeMapper {
           return LogicalType.NUMERIC;
         case "JSON":
           return LogicalType.JSON;
-        case "ARRAY":
-          return LogicalType.ARRAY;
-        case "STRUCT":
-          return LogicalType.STRUCT;
+          // Todo: Add support for array datatype
         default:
           return LogicalType.STRING;
       }
@@ -75,6 +74,9 @@ public class SpannerTypeMapper implements TypeMapper {
           return LogicalType.BOOLEAN;
         case "BIGINT":
         case "INT8":
+        case "INTEGER":
+        case "INT":
+        case "INT4":
           return LogicalType.INT64;
         case "REAL":
         case "FLOAT4":
@@ -84,11 +86,14 @@ public class SpannerTypeMapper implements TypeMapper {
         case "CHARACTER VARYING":
         case "VARCHAR":
         case "TEXT":
+        case "CHARACTER":
+        case "CHAR":
           return LogicalType.STRING;
         case "BYTEA":
           return LogicalType.BYTES;
         case "DATE":
           return LogicalType.DATE;
+        case "TIMESTAMP":
         case "TIMESTAMP WITH TIME ZONE":
         case "TIMESTAMPTZ":
           return LogicalType.TIMESTAMP;

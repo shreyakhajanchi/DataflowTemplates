@@ -40,12 +40,14 @@ import org.apache.beam.sdk.values.Row;
 
 @Template(
     name = "Data_Generator",
-    category = TemplateCategory.UTILITIES,
+    category = TemplateCategory.STREAMING,
     displayName = "Data Generator",
     description = "A template to generate synthetic data based on a source schema.",
     optionsClass = DataGeneratorOptions.class,
     flexContainerName = "data-generator",
-    contactInformation = "https://cloud.google.com/support")
+    contactInformation = "https://cloud.google.com/support",
+    streaming = true,
+    supportsAtLeastOnce = true)
 public class DataGenerator {
 
   public static void main(String[] args) {
@@ -53,7 +55,7 @@ public class DataGenerator {
 
     DataGeneratorOptions options =
         PipelineOptionsFactory.fromArgs(args).withValidation().as(DataGeneratorOptions.class);
-
+    options.setStreaming(true);
     run(options);
   }
 
@@ -62,7 +64,9 @@ public class DataGenerator {
 
     // Fetch schema as side input
     PCollectionView<DataGeneratorSchema> schemaView =
-        pipeline.apply("LoadSchema", new SchemaLoader(options));
+        pipeline.apply(
+            "LoadSchema",
+            new SchemaLoader(options.getSinkType(), options.getSinkOptions(), options.getQps()));
 
     // Generate ticks based on schema QPS
     // Generate ticks based on schema QPS
@@ -87,8 +91,8 @@ public class DataGenerator {
                       @ProcessElement
                       public void processElement(ProcessContext c) {
                         String tableName = c.element().getKey();
-                        Row row = c.element().getValue();
-                        int hash = (tableName + row.toString()).hashCode();
+                        Row pkValues = c.element().getValue();
+                        int hash = (tableName + pkValues.toString()).hashCode();
                         c.output(KV.of(Math.abs(hash % 5000), c.element()));
                       }
                     }))

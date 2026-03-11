@@ -18,15 +18,11 @@ package com.google.cloud.teleport.v2.templates.spanner;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import com.google.cloud.teleport.v2.spanner.ddl.Ddl;
-import com.google.cloud.teleport.v2.spanner.ddl.InformationSchemaScanner;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.common.collect.ImmutableList;
 import java.io.IOException;
-import org.apache.beam.sdk.io.gcp.spanner.SpannerAccessor;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
 import org.junit.Before;
 import org.junit.Test;
@@ -38,8 +34,6 @@ import org.mockito.junit.MockitoJUnitRunner;
 @RunWith(MockitoJUnitRunner.class)
 public class SpannerSchemaFetcherTest {
 
-  @Mock private SpannerAccessor spannerAccessor;
-  @Mock private InformationSchemaScanner scanner;
   @Mock private Ddl ddl;
 
   @Spy private SpannerSchemaFetcher fetcher;
@@ -52,8 +46,6 @@ public class SpannerSchemaFetcherTest {
 
   @Test
   public void testGetSchema() throws IOException {
-    doReturn(spannerAccessor).when(fetcher).getSpannerAccessor(any(SpannerConfig.class));
-    doReturn(scanner).when(fetcher).getInformationSchemaScanner(spannerAccessor);
 
     com.google.cloud.teleport.v2.spanner.ddl.Table table =
         com.google.cloud.teleport.v2.spanner.ddl.Table.builder()
@@ -66,21 +58,18 @@ public class SpannerSchemaFetcherTest {
 
     Ddl.Builder builder = Ddl.builder();
     builder.addTable(table);
-    when(scanner.scan()).thenReturn(builder.build());
+    Ddl ddl = builder.build();
+    doReturn(ddl).when(fetcher).fetchDdl(any(SpannerConfig.class));
 
     DataGeneratorSchema result = fetcher.getSchema();
 
     assertEquals(1, result.tables().size());
     assertEquals("t", result.tables().get("t").name());
     assertEquals("id", result.tables().get("t").columns().get(0).name());
-    verify(scanner).scan();
-    verify(spannerAccessor).close();
   }
 
   @Test
   public void testGetSchemaWithForeignKeysAndUniqueKeys() throws IOException {
-    doReturn(spannerAccessor).when(fetcher).getSpannerAccessor(any(SpannerConfig.class));
-    doReturn(scanner).when(fetcher).getInformationSchemaScanner(spannerAccessor);
 
     com.google.cloud.teleport.v2.spanner.ddl.Table parentTable =
         com.google.cloud.teleport.v2.spanner.ddl.Table.builder()
@@ -135,7 +124,8 @@ public class SpannerSchemaFetcherTest {
     Ddl.Builder builder = Ddl.builder();
     builder.addTable(parentTable);
     builder.addTable(childTable);
-    when(scanner.scan()).thenReturn(builder.build());
+    Ddl ddl = builder.build();
+    doReturn(ddl).when(fetcher).fetchDdl(any(SpannerConfig.class));
 
     DataGeneratorSchema result = fetcher.getSchema();
 
@@ -151,8 +141,6 @@ public class SpannerSchemaFetcherTest {
 
   @Test
   public void testGetSchemaWithPrimaryKeyAndStoringColumns() throws IOException {
-    doReturn(spannerAccessor).when(fetcher).getSpannerAccessor(any(SpannerConfig.class));
-    doReturn(scanner).when(fetcher).getInformationSchemaScanner(spannerAccessor);
 
     com.google.cloud.teleport.v2.spanner.ddl.Index.Builder pkIndexBuilder =
         com.google.cloud.teleport.v2.spanner.ddl.Index.builder()
@@ -198,7 +186,8 @@ public class SpannerSchemaFetcherTest {
 
     Ddl.Builder builder = Ddl.builder();
     builder.addTable(table);
-    when(scanner.scan()).thenReturn(builder.build());
+    Ddl ddl = builder.build();
+    doReturn(ddl).when(fetcher).fetchDdl(any(SpannerConfig.class));
 
     DataGeneratorSchema result = fetcher.getSchema();
 

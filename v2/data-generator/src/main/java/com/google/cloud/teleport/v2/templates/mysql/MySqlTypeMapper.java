@@ -15,9 +15,9 @@
  */
 package com.google.cloud.teleport.v2.templates.mysql;
 
+import com.google.cloud.teleport.v2.templates.common.TypeMapper;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
 import com.google.cloud.teleport.v2.templates.model.SinkDialect;
-import com.google.cloud.teleport.v2.templates.utils.TypeMapper;
 import java.util.Locale;
 
 /** TypeMapper implementation for JDBC types. */
@@ -25,6 +25,13 @@ public class MySqlTypeMapper implements TypeMapper {
 
   @Override
   public LogicalType getLogicalType(String typeName, SinkDialect dialect) {
+    // This method signature is kept for interface compatibility,
+    // but the size is needed for TINYINT handling.
+    // Call the overloaded method with a default size.
+    return getLogicalType(typeName, dialect, null);
+  }
+
+  public LogicalType getLogicalType(String typeName, SinkDialect dialect, Long size) {
     if (typeName == null) {
       return LogicalType.STRING;
     }
@@ -35,44 +42,62 @@ public class MySqlTypeMapper implements TypeMapper {
       upperType = upperType.substring(0, upperType.indexOf("("));
     }
 
-    // Generic JDBC/MySQL mapping
     switch (upperType) {
       case "BIT":
       case "BOOLEAN":
       case "BOOL":
         return LogicalType.BOOLEAN;
+
       case "TINYINT":
+        // Tip: If type == "TINYINT" AND length == 1, return LogicalType.BOOLEAN.
+        return (size != null && size == 1) ? LogicalType.BOOLEAN : LogicalType.INT64;
       case "SMALLINT":
+      case "MEDIUMINT": // Added
       case "INTEGER":
       case "INT":
       case "BIGINT":
+      case "YEAR": // Added - safer to treat as INT64 for generation
         return LogicalType.INT64;
+
       case "FLOAT":
       case "REAL":
       case "DOUBLE":
+        return LogicalType.FLOAT64; // Separate from Fixed-Point
+
       case "NUMERIC":
       case "DECIMAL":
-        return LogicalType.NUMERIC; // Or FLOAT64 depending on usage, but NUMERIC is safer
+        return LogicalType.NUMERIC;
+
       case "CHAR":
       case "VARCHAR":
       case "LONGVARCHAR":
       case "TEXT":
       case "MEDIUMTEXT":
       case "LONGTEXT":
+      case "ENUM": // Added
+      case "SET": // Added
         return LogicalType.STRING;
+
       case "BINARY":
       case "VARBINARY":
       case "LONGVARBINARY":
       case "BLOB":
+      case "MEDIUMBLOB": // Added
+      case "LONGBLOB": // Added
+      case "TINYBLOB": // Added
         return LogicalType.BYTES;
+
       case "DATE":
         return LogicalType.DATE;
-      case "TIME":
+
+      case "TIME": // Note: May need a specific TIME type if engine supports it
       case "TIMESTAMP":
       case "DATETIME":
         return LogicalType.TIMESTAMP;
+
       case "JSON":
         return LogicalType.JSON;
+
       default:
         return LogicalType.STRING;
     }
