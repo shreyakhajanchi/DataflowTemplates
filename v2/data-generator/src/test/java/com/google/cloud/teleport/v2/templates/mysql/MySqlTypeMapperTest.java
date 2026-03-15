@@ -35,9 +35,9 @@ public class MySqlTypeMapperTest {
     verifyMapping("INTEGER", LogicalType.INT64);
     verifyMapping("INT", LogicalType.INT64);
     verifyMapping("BIGINT", LogicalType.INT64);
-    verifyMapping("FLOAT", LogicalType.NUMERIC);
-    verifyMapping("REAL", LogicalType.NUMERIC);
-    verifyMapping("DOUBLE", LogicalType.NUMERIC);
+    verifyMapping("FLOAT", LogicalType.FLOAT64);
+    verifyMapping("REAL", LogicalType.FLOAT64);
+    verifyMapping("DOUBLE", LogicalType.FLOAT64);
     verifyMapping("NUMERIC", LogicalType.NUMERIC);
     verifyMapping("DECIMAL", LogicalType.NUMERIC);
     verifyMapping("CHAR", LogicalType.STRING);

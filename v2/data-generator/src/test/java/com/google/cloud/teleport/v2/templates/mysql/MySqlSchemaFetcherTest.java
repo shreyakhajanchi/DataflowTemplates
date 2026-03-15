@@ -50,7 +50,7 @@ public class MySqlSchemaFetcherTest {
     File tmpFile = File.createTempFile("shard", ".json");
     tmpFile.deleteOnExit();
     String shardJson =
-        "[{\"logicalShardId\": \"shard1\", \"host\": \"localhost\", \"port\": \"3306\", \"user\": \"root\", \"password\": \"pass\", \"dbNameToLogicalShardIdMap\": {\"db\": \"db1\"}, \"secretManagerUri\": \"\"}]";
+        "[{\"logicalShardId\": \"shard1\", \"host\": \"localhost\", \"port\": \"3306\", \"user\": \"root\", \"password\": \"pass\", \"dbName\": \"db\", \"dbNameToLogicalShardIdMap\": {\"db\": \"db1\"}, \"secretManagerUri\": \"\"}]";
     Files.write(tmpFile.toPath(), shardJson.getBytes(StandardCharsets.UTF_8));
     fetcher.init(tmpFile.getAbsolutePath(), shardJson);
   }
@@ -60,7 +60,7 @@ public class MySqlSchemaFetcherTest {
     File tmpFile = File.createTempFile("shard", ".json");
     tmpFile.deleteOnExit();
     String shardJson =
-        "[{\"logicalShardId\": \"shard1\", \"host\": \"localhost\", \"port\": \"3306\", \"user\": \"root\", \"password\": \"pass\", \"dbNameToLogicalShardIdMap\": {\"db\": \"db1\"}, \"secretManagerUri\": \"\"}]";
+        "[{\"logicalShardId\": \"shard1\", \"host\": \"localhost\", \"port\": \"3306\", \"user\": \"root\", \"password\": \"pass\", \"dbName\": \"db\", \"dbNameToLogicalShardIdMap\": {\"db\": \"db1\"}, \"secretManagerUri\": \"\"}]";
     Files.write(tmpFile.toPath(), shardJson.getBytes(StandardCharsets.UTF_8));
     fetcher.init(tmpFile.getAbsolutePath(), shardJson);
 
@@ -110,7 +110,7 @@ public class MySqlSchemaFetcherTest {
     File tmpFile = File.createTempFile("shard", ".json");
     tmpFile.deleteOnExit();
     String shardJson =
-        "[{\"logicalShardId\": \"shard1\", \"host\": \"localhost\", \"port\": \"3306\", \"user\": \"root\", \"password\": \"pass\", \"dbNameToLogicalShardIdMap\": {\"db\": \"db1\"}, \"secretManagerUri\": \"\"}]";
+        "[{\"logicalShardId\": \"shard1\", \"host\": \"localhost\", \"port\": \"3306\", \"user\": \"root\", \"password\": \"pass\", \"dbName\": \"db\", \"dbNameToLogicalShardIdMap\": {\"db\": \"db1\"}, \"secretManagerUri\": \"\"}]";
     Files.write(tmpFile.toPath(), shardJson.getBytes(StandardCharsets.UTF_8));
     fetcher.init(tmpFile.getAbsolutePath(), shardJson);
 

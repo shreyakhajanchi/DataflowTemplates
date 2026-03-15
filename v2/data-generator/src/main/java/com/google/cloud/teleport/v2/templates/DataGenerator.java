@@ -62,6 +62,13 @@ public class DataGenerator {
   public static PipelineResult run(DataGeneratorOptions options) {
     Pipeline pipeline = Pipeline.create(options);
 
+    // Register SerializableCoder for Row class globally since we use dynamically constructed
+    // schemas at runtime
+    pipeline
+        .getCoderRegistry()
+        .registerCoderForClass(
+            Row.class, org.apache.beam.sdk.coders.SerializableCoder.of(Row.class));
+
     // Fetch schema as side input
     PCollectionView<DataGeneratorSchema> schemaView =
         pipeline.apply(

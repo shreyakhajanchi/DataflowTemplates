@@ -23,7 +23,6 @@ import java.util.List;
 import java.util.Random;
 import java.util.stream.Collectors;
 import org.apache.beam.sdk.coders.KvCoder;
-import org.apache.beam.sdk.coders.RowCoder;
 import org.apache.beam.sdk.schemas.Schema;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.PTransform;
@@ -46,7 +45,7 @@ public class GeneratePrimaryKey
         .setCoder(
             KvCoder.of(
                 org.apache.beam.sdk.coders.StringUtf8Coder.of(),
-                RowCoder.of(Schema.builder().build())));
+                org.apache.beam.sdk.coders.SerializableCoder.of(Row.class)));
   }
 
   static class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Row>> {

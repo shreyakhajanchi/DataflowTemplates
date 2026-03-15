@@ -71,7 +71,7 @@ public class SchemaLoader extends PTransform<PBegin, PCollectionView<DataGenerat
     FetchSchemaFn(SinkType sinkType, String sinkOptionsPath, Integer qps) {
       this.sinkType = sinkType;
       this.sinkOptionsPath = sinkOptionsPath;
-      this.qps = qps != null ? qps : 1;
+      this.qps = qps != null ? qps : 1000;
     }
 
     @ProcessElement

@@ -18,6 +18,7 @@ package com.google.cloud.teleport.v2.templates;
 import com.google.cloud.teleport.metadata.TemplateParameter;
 import com.google.cloud.teleport.v2.options.CommonTemplateOptions;
 import org.apache.beam.sdk.extensions.gcp.options.GcpOptions;
+import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.StreamingOptions;
 import org.apache.beam.sdk.options.Validation.Required;
 
@@ -64,7 +65,7 @@ public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions,
       optional = true,
       description = "Batch Size",
       helpText = "The batch size for writing to the sink. Default is 100.")
-  @org.apache.beam.sdk.options.Default.Integer(100)
+  @Default.Integer(100)
   Integer getBatchSize();
 
   void setBatchSize(Integer value);
@@ -74,7 +75,7 @@ public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions,
       optional = true,
       description = "QPS per table",
       helpText = "The target QPS for each table. Default is 1000.")
-  @org.apache.beam.sdk.options.Default.Integer(1000)
+  @Default.Integer(1000)
   Integer getQps();
 
   void setQps(Integer value);

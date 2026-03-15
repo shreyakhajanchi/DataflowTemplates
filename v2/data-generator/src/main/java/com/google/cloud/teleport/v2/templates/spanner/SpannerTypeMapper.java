@@ -63,7 +63,10 @@ public class SpannerTypeMapper implements TypeMapper {
           return LogicalType.NUMERIC;
         case "JSON":
           return LogicalType.JSON;
-          // Todo: Add support for array datatype
+        case "ARRAY":
+          return LogicalType.ARRAY;
+        case "STRUCT":
+          return LogicalType.STRUCT;
         default:
           return LogicalType.STRING;
       }
