@@ -69,6 +69,7 @@ public class BatchAndWriteTest implements Serializable {
   public void testBatchAndWriteFlushesOnBatchSize() throws IOException {
     DataGeneratorOptions options = mock(DataGeneratorOptions.class);
     when(options.getBatchSize()).thenReturn(2);
+    when(options.getSinkType()).thenReturn(DataGeneratorOptions.SinkType.SPANNER);
     when(options.getSinkOptions()).thenReturn("{\"type\":\"spanner\"}");
 
     DataWriter mockWriter = mock(DataWriter.class);
@@ -151,7 +152,11 @@ public class BatchAndWriteTest implements Serializable {
         DataGeneratorOptions options,
         PCollectionView<DataGeneratorSchema> schemaView,
         DataWriter writer) {
-      super(options.getSinkOptions(), options.getBatchSize(), schemaView);
+      super(
+          options.getSinkType().name(),
+          options.getSinkOptions(),
+          options.getBatchSize(),
+          schemaView);
       staticWriter = writer;
     }
 
@@ -188,6 +193,7 @@ public class BatchAndWriteTest implements Serializable {
   public void testCascadingGeneration() throws Exception {
     DataGeneratorOptions options = mock(DataGeneratorOptions.class);
     when(options.getBatchSize()).thenReturn(10);
+    when(options.getSinkType()).thenReturn(DataGeneratorOptions.SinkType.SPANNER);
     when(options.getSinkOptions()).thenReturn("{\"type\":\"spanner\"}");
     DataWriter mockWriter = mock(DataWriter.class);
 

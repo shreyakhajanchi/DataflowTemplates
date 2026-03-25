@@ -76,16 +76,21 @@ public class DataGenerator {
             new SchemaLoader(options.getSinkType(), options.getSinkOptions(), options.getQps()));
 
     // Generate ticks based on schema QPS
-    // Generate ticks based on schema QPS
+    int baseTickRate = options.getBaseTickRate() != null ? options.getBaseTickRate() : 1000;
     PCollection<DataGeneratorTable> ticks =
         pipeline
-            .apply("TriggerTick", org.apache.beam.sdk.transforms.Create.of(new byte[0]))
+            .apply(
+                "TriggerTick",
+                org.apache.beam.sdk.io.GenerateSequence.from(0)
+                    .withRate(baseTickRate, org.joda.time.Duration.standardSeconds(1)))
             .apply("GenerateTicks", new GenerateTicks(options, schemaView))
+            .apply("ReshuffleProvider", Reshuffle.viaRandomKey())
             .apply("SelectTable", new SelectTable(schemaView));
 
     // Generate Primary Keys
+    int maxShards = options.getMaxShards() != null ? options.getMaxShards() : 1;
     PCollection<KV<String, Row>> pendingRows =
-        ticks.apply("GeneratePrimaryKey", new GeneratePrimaryKey());
+        ticks.apply("GeneratePrimaryKey", new GeneratePrimaryKey(maxShards));
 
     // Reshuffle based on Hash(TableName + PK) to ensure same PK goes to same worker
     // Key = Hash(TableName + PK) % 5000
@@ -116,7 +121,11 @@ public class DataGenerator {
 
     reshuffledRows.apply(
         "BatchAndWrite",
-        new BatchAndWrite(options.getSinkOptions(), options.getBatchSize(), schemaView));
+        new BatchAndWrite(
+            options.getSinkType().name(),
+            options.getSinkOptions(),
+            options.getBatchSize(),
+            schemaView));
 
     return pipeline.run();
   }

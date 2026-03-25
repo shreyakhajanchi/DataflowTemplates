@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 Google LLC
+ * Copyright (C) 2024 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -13,18 +13,19 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.cloud.teleport.v2.templates.writer;
+package com.google.cloud.teleport.v2.spanner.migrations.exceptions;
 
-import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
-import java.util.List;
-import org.apache.beam.sdk.values.Row;
+/** Exception when connecting to the source database. */
+public class ConnectionException extends Exception {
+  public ConnectionException(Exception e) {
+    super(e);
+  }
 
-/** Interface for writing data to a sink. */
-public interface DataWriter extends AutoCloseable {
-  void write(List<Row> rows, DataGeneratorTable table);
+  public ConnectionException(String message) {
+    super(message);
+  }
 
-  @Override
-  default void close() {
-    // Default no-op
+  public ConnectionException(String message, Exception e) {
+    super(message, e);
   }
 }

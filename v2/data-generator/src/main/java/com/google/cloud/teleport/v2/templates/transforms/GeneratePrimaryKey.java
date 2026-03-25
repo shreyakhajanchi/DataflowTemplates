@@ -38,10 +38,16 @@ import org.apache.beam.sdk.values.Row;
 public class GeneratePrimaryKey
     extends PTransform<PCollection<DataGeneratorTable>, PCollection<KV<String, Row>>> {
 
+  private final int maxShards;
+
+  public GeneratePrimaryKey(int maxShards) {
+    this.maxShards = maxShards;
+  }
+
   @Override
   public PCollection<KV<String, Row>> expand(PCollection<DataGeneratorTable> input) {
     return input
-        .apply("GeneratePrimaryKey", ParDo.of(new GeneratePrimaryKeyFn()))
+        .apply("GeneratePrimaryKey", ParDo.of(new GeneratePrimaryKeyFn(maxShards)))
         .setCoder(
             KvCoder.of(
                 org.apache.beam.sdk.coders.StringUtf8Coder.of(),
@@ -49,8 +55,14 @@ public class GeneratePrimaryKey
   }
 
   static class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Row>> {
+    public static final String SHARD_ID_COLUMN_NAME = "_dg_shard_id";
+    private final int maxShards;
     private transient Faker faker;
     private transient Random random;
+
+    public GeneratePrimaryKeyFn(int maxShards) {
+      this.maxShards = maxShards;
+    }
 
     @Setup
     public void setup() {
@@ -79,6 +91,10 @@ public class GeneratePrimaryKey
         rowBuilder.addValue(generateValue(column));
       }
 
+      // Add logical shard ID
+      String shardId = "shard" + random.nextInt(maxShards);
+      rowBuilder.addValue(shardId);
+
       out.output(KV.of(table.name(), rowBuilder.build()));
     }
 
@@ -88,6 +104,7 @@ public class GeneratePrimaryKey
         builder.addField(
             Schema.Field.of(col.name(), DataGeneratorUtils.mapToBeamFieldType(col.logicalType())));
       }
+      builder.addField(Schema.Field.of(SHARD_ID_COLUMN_NAME, Schema.FieldType.STRING));
       return builder.build();
     }
 

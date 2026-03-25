@@ -80,24 +80,7 @@ public class GeneratePrimaryKeyTest {
 
     PCollection<DataGeneratorTable> input = pipeline.apply(Create.of(table));
 
-    PCollection<KV<String, Row>> output = input.apply(new GeneratePrimaryKey());
-
-    // Define the expected schema for the output rows
-    org.apache.beam.sdk.schemas.Schema rowSchema =
-        org.apache.beam.sdk.schemas.Schema.builder()
-            .addField(
-                org.apache.beam.sdk.schemas.Schema.Field.of(
-                    "id", org.apache.beam.sdk.schemas.Schema.FieldType.STRING))
-            .addField(
-                org.apache.beam.sdk.schemas.Schema.Field.of(
-                    "seq", org.apache.beam.sdk.schemas.Schema.FieldType.INT64))
-            .build();
-
-    // Set the coder for the output PCollection
-    output.setCoder(
-        org.apache.beam.sdk.coders.KvCoder.of(
-            org.apache.beam.sdk.coders.StringUtf8Coder.of(),
-            org.apache.beam.sdk.coders.RowCoder.of(rowSchema)));
+    PCollection<KV<String, Row>> output = input.apply(new GeneratePrimaryKey(1));
 
     PAssert.that(output)
         .satisfies(
@@ -114,9 +97,9 @@ public class GeneratePrimaryKeyTest {
               }
 
               // Verify schema
-              if (row.getSchema().getFieldCount() != 2) {
+              if (row.getSchema().getFieldCount() != 3) {
                 throw new AssertionError(
-                    "Schema should have 2 fields (PKs only), but had "
+                    "Schema should have 3 fields (2 PKs + Shard ID), but had "
                         + row.getSchema().getFieldCount());
               }
               if (!row.getSchema().getField(0).getName().equals("id")) {
@@ -125,16 +108,27 @@ public class GeneratePrimaryKeyTest {
               if (!row.getSchema().getField(1).getName().equals("seq")) {
                 throw new AssertionError("Second field should be seq");
               }
+              if (!row.getSchema()
+                  .getField(2)
+                  .getName()
+                  .equals(GeneratePrimaryKey.GeneratePrimaryKeyFn.SHARD_ID_COLUMN_NAME)) {
+                throw new AssertionError("Third field should be shard_id");
+              }
 
               // Verify values
               String id = row.getString("id");
               Long seq = row.getInt64("seq");
+              String shardId =
+                  row.getString(GeneratePrimaryKey.GeneratePrimaryKeyFn.SHARD_ID_COLUMN_NAME);
 
               if (id == null || id.isEmpty()) {
                 throw new AssertionError("ID should not be empty");
               }
               if (seq == null) {
                 throw new AssertionError("Seq should not be null");
+              }
+              if (shardId == null || shardId.isEmpty()) {
+                throw new AssertionError("Shard ID should not be empty");
               }
 
               return null;

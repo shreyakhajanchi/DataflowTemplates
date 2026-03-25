@@ -16,19 +16,13 @@
 package com.google.cloud.teleport.v2.templates.transforms;
 
 import com.github.javafaker.Faker;
-import com.google.cloud.ByteArray;
-import com.google.cloud.spanner.Mutation;
-import com.google.cloud.spanner.Value;
 import com.google.cloud.teleport.v2.templates.DataGeneratorOptions;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
-import com.google.cloud.teleport.v2.templates.model.LogicalType;
 import com.google.cloud.teleport.v2.templates.utils.DataGeneratorUtils;
 import com.google.cloud.teleport.v2.templates.writer.DataWriter;
-import com.google.cloud.teleport.v2.templates.writer.SpannerDataWriter;
-import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -44,7 +38,6 @@ import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.PDone;
 import org.apache.beam.sdk.values.Row;
-import org.joda.time.Instant;
 
 /**
  * A {@link PTransform} that generates the remaining columns for a record, batches them, and writes
@@ -52,12 +45,17 @@ import org.joda.time.Instant;
  */
 public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDone> {
 
+  private final String sinkType;
   private final String sinkOptionsPath;
   private final Integer batchSize;
   private final PCollectionView<DataGeneratorSchema> schemaView;
 
   public BatchAndWrite(
-      String sinkOptionsPath, Integer batchSize, PCollectionView<DataGeneratorSchema> schemaView) {
+      String sinkType,
+      String sinkOptionsPath,
+      Integer batchSize,
+      PCollectionView<DataGeneratorSchema> schemaView) {
+    this.sinkType = sinkType;
     this.sinkOptionsPath = sinkOptionsPath;
     this.batchSize = batchSize;
     this.schemaView = schemaView;
@@ -67,12 +65,13 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
   public PDone expand(PCollection<KV<String, Row>> input) {
     input.apply(
         "BatchAndWriteFn",
-        ParDo.of(new BatchAndWriteFn(sinkOptionsPath, batchSize, schemaView))
+        ParDo.of(new BatchAndWriteFn(sinkType, sinkOptionsPath, batchSize, schemaView))
             .withSideInputs(schemaView));
     return PDone.in(input.getPipeline());
   }
 
   static class BatchAndWriteFn extends DoFn<KV<String, Row>, Void> {
+    private final String sinkType;
     private final String sinkOptionsPath;
     private final Integer configuredBatchSize;
     private final PCollectionView<DataGeneratorSchema> schemaView;
@@ -80,8 +79,8 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
     protected transient DataWriter writer;
     protected transient Faker faker;
     private transient DataGeneratorSchema schema;
-    // Buffer: TableName -> List of Mutations
-    private transient Map<String, List<Mutation>> buffers;
+    // Buffer: TableName -> List of Rows
+    private transient Map<String, List<Row>> buffers;
     // Map to keep track of DataGeneratorTable objects for flushing
     private transient Map<String, DataGeneratorTable> tableMap;
 
@@ -92,6 +91,7 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
 
     public BatchAndWriteFn(
         DataGeneratorOptions options, PCollectionView<DataGeneratorSchema> schemaView) {
+      this.sinkType = options.getSinkType().name();
       this.sinkOptionsPath = options.getSinkOptions();
       this.configuredBatchSize = options.getBatchSize();
       this.schemaView = schemaView;
@@ -100,9 +100,11 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
     }
 
     public BatchAndWriteFn(
+        String sinkType,
         String sinkOptionsPath,
         Integer batchSize,
         PCollectionView<DataGeneratorSchema> schemaView) {
+      this.sinkType = sinkType;
       this.sinkOptionsPath = sinkOptionsPath;
       this.configuredBatchSize = batchSize;
       this.schemaView = schemaView;
@@ -114,10 +116,13 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
     public void setup() {
       if (this.writer == null) {
         String sinkOptionsJson = readSinkOptions(sinkOptionsPath);
-        // SpannerDataWriter seems to only need project, instance, and database from
-        // options.
-        // Create a minimal options object for it.
-        this.writer = new SpannerDataWriter(sinkOptionsJson);
+        if ("MYSQL".equalsIgnoreCase(sinkType)) {
+          this.writer =
+              new com.google.cloud.teleport.v2.templates.writer.MySqlDataWriter(sinkOptionsJson);
+        } else {
+          this.writer =
+              new com.google.cloud.teleport.v2.templates.writer.SpannerDataWriter(sinkOptionsJson);
+        }
       }
       if (this.faker == null) {
         this.faker = new Faker();
@@ -177,9 +182,8 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       // 0. Ensure Row has all columns (generate missing if needed)
       Row fullRow = completeRow(table, row);
 
-      // 1. Generate and Buffer Mutation for current record
-      Mutation mutation = rowToMutation(table, fullRow);
-      buffers.computeIfAbsent(tableName, k -> new ArrayList<>()).add(mutation);
+      // 1. Buffer Row for current record
+      buffers.computeIfAbsent(tableName, k -> new ArrayList<>()).add(fullRow);
       if (buffers.get(tableName).size() >= batchSize) {
         flush(tableName);
       }
@@ -350,7 +354,7 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
     }
 
     private void flush(String tableName) {
-      List<Mutation> batch = buffers.get(tableName);
+      List<Row> batch = buffers.get(tableName);
       if (batch != null && !batch.isEmpty()) {
         writer.write(batch, tableMap.get(tableName));
         batchesWritten.inc();
@@ -359,39 +363,7 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       }
     }
 
-    private Mutation generateMutation(DataGeneratorTable table, Row row) {
-      Mutation.WriteBuilder builder = Mutation.newInsertOrUpdateBuilder(table.name());
-
-      // Row 'row' might be Partial (PK only) OR Full (if recursively generated).
-      // We need to handle both.
-      // Actually, for recursion to work, we probably want 'row' to be FULL row
-      // always?
-      // But for the input from GeneratePrimaryKey, it is Partial.
-      // So we must fill in the gaps AND update the 'row' object if we want to pass it
-      // to children?
-      // But Row is immutable.
-
-      // Let's split this:
-      // 1. Identify which columns are present in 'row'.
-      // 2. Generate missing columns.
-      // 3. Build Mutation.
-      // 4. (Implicitly) we have the full set of values now.
-
-      // To pass to children, 'processTable' should probably take the 'full' set of
-      // values.
-      // But 'processTable' takes 'Row'.
-      // Let's refactor 'processTable' to ensure it constructs a Full Row if partial
-      // is passed?
-
-      // Wait, 'generateChildRow' needs Full Parent Row if FK points to non-PK.
-      // If FK points to PK (99% cases), Partial Row is fine.
-      // Let's assume FK points to PK for now to keep it simple, OR reconstruct full
-      // row.
-
-      return rowToMutation(table, row);
-    }
-
-    // Helper to convert Row to Mutation, generating missing fields on the fly
+    // Removed generateMutation and setColumnValue methods to SpannerDataWriter
     // Note: This returns Mutation. It does NOT return the generated values.
     // This is a problem for recursion if children need those generated values.
     // Better: modify processTable to:
@@ -424,72 +396,6 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
         values.add(val);
       }
       return Row.withSchema(schemaBuilder.build()).addValues(values).build();
-    }
-
-    private Mutation rowToMutation(DataGeneratorTable table, Row row) {
-      Mutation.WriteBuilder builder = Mutation.newInsertOrUpdateBuilder(table.name());
-      for (DataGeneratorColumn col : table.columns()) {
-        Object val = getFieldFromRow(row, col.name());
-        setColumnValueFromLogicalType(builder, col.name(), val, col.logicalType());
-      }
-      return builder.build();
-    }
-
-    private void setColumnValue(
-        Mutation.WriteBuilder builder,
-        String columnName,
-        Object value,
-        org.apache.beam.sdk.schemas.Schema.FieldType splitType) {
-
-      // Deprecated or unused if we use setColumnValueFromLogicalType
-      if (value == null) {
-        return;
-      }
-      // implementation ... (omitting as we will use the logic below)
-    }
-
-    private void setColumnValueFromLogicalType(
-        Mutation.WriteBuilder builder, String columnName, Object value, LogicalType logicalType) {
-      if (value == null) {
-        return;
-      }
-      switch (logicalType) {
-        case STRING:
-        case JSON:
-          builder.set(columnName).to((String) value);
-          break;
-        case INT64:
-          builder.set(columnName).to((Long) value);
-          break;
-        case FLOAT64:
-          builder.set(columnName).to((Double) value);
-          break;
-        case NUMERIC:
-          builder.set(columnName).to((BigDecimal) value);
-          break;
-        case BOOLEAN:
-          builder.set(columnName).to((Boolean) value);
-          break;
-        case BYTES:
-          builder.set(columnName).to(Value.bytes(ByteArray.copyFrom((byte[]) value)));
-          break;
-        case TIMESTAMP:
-        case DATE:
-          // Value could be Instant or Long? Faker generates Instant.
-          if (value instanceof Instant) {
-            builder
-                .set(columnName)
-                .to(
-                    com.google.cloud.Timestamp.ofTimeMicroseconds(
-                        ((Instant) value).getMillis() * 1000));
-          } else {
-            builder.set(columnName).to(value.toString());
-          }
-
-          break;
-        default:
-          builder.set(columnName).to(value.toString());
-      }
     }
 
     private Object generateValue(DataGeneratorColumn column) {

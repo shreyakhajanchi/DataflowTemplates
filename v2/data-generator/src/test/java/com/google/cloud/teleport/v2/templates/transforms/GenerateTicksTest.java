@@ -87,26 +87,29 @@ public class GenerateTicksTest implements Serializable {
     PCollectionView<DataGeneratorSchema> schemaView =
         pipeline.apply("CreateSchema", Create.of(schema)).apply("ViewSchema", View.asSingleton());
 
-    // NOTE: Testing PTransform with Timers and InfiniteOutput in standard
-    // TestPipeline is tricky.
-    // Standard PassThroughJUnitRunner waits for pipeline to finish, but this
-    // transform generates infinite ticks.
-    // For unit testing purpose, we are checking if the pipeline constructs without
-    // error.
     // Integration tests or specialized TestStream usage would be needed for
     // verifying timing precision.
+    // However, given the refactoring, we can verify the scale multiplier logic with
+    // a bounded Create transform.
 
     DataGeneratorOptions options =
         org.apache.beam.sdk.options.PipelineOptionsFactory.as(DataGeneratorOptions.class);
-    options.setQpsPerPartition(100);
+    // 20 Root QPS vs 10 Base Tick Rate = Multiplier of 2
+    options.setBaseTickRate(10);
 
-    pipeline
-        .apply("Trigger", Create.of(new byte[0]))
-        .apply("GenerateTicks", new GenerateTicks(options, schemaView));
+    org.apache.beam.sdk.values.PCollection<Long> scaledTicks =
+        pipeline
+            .apply("Trigger", Create.of(100L, 200L, 300L, 400L, 500L)) // 5 incoming ticks
+            .apply("GenerateTicks", new GenerateTicks(options, schemaView));
 
-    // Not running pipeline.run() because it would be an infinite loop or require
-    // TestStream with processing time
-    // simulation which is complex for Side Input dependency test.
-    // This test ensures construction validity.
+    // Because baseTickRate is 10 and schema has 20 root QPS, multiplier is exactly 2.
+    // 5 incoming ticks * 2 = 10 output ticks.
+    org.apache.beam.sdk.transforms.Count.globally();
+    org.apache.beam.sdk.values.PCollection<Long> count =
+        scaledTicks.apply("Count", org.apache.beam.sdk.transforms.Count.globally());
+
+    org.apache.beam.sdk.testing.PAssert.that(count).containsInAnyOrder(10L);
+
+    pipeline.run().waitUntilFinish();
   }
 }

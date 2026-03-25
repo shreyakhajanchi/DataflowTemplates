@@ -1,0 +1,6 @@
+{
+  "renamedTables":{
+    "chat_messages_v2_start":"chat_messages_v2",
+    "chat_messages_v2_default": "chat_messages_v2"
+  }
+}

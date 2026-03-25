@@ -6,24 +6,7 @@ locals {
   migration_id = var.common_params.migration_id != null ? var.common_params.migration_id : random_pet.migration_id.id
 }
 
-# Setup network firewalls for datastream if creating a private connection.
-resource "google_compute_firewall" "allow-datastream" {
-  depends_on  = [google_project_service.enabled_apis]
-  count       = var.datastream_params.create_firewall_rule == true ? 1 : 0
-  project     = var.common_params.host_project != null ? var.common_params.host_project : var.common_params.project
-  name        = "allow-datastream"
-  network     = var.common_params.host_project != null ? "projects/${var.common_params.host_project}/global/networks/${var.datastream_params.private_connectivity.vpc_name}" : "projects/${var.common_params.project}/global/networks/${var.datastream_params.private_connectivity.vpc_name}"
-  description = "Allow traffic from private connectivity endpoint of Datastream"
 
-  allow {
-    protocol = "tcp"
-    ports    = ["3306"]
-  }
-  source_ranges      = [var.datastream_params.private_connectivity.range]
-  target_tags        = var.datastream_params.firewall_rule_target_tags != null ? var.datastream_params.firewall_rule_target_tags : []
-  destination_ranges = var.datastream_params.firewall_rule_target_ranges != null ? var.datastream_params.firewall_rule_target_ranges : []
-
-}
 
 # Create a private connectivity configuration if needed.
 resource "google_datastream_private_connection" "datastream_private_connection" {
@@ -282,7 +265,7 @@ resource "google_dataflow_flex_template_job" "live_migration_job" {
     shouldCreateShadowTables        = tostring(var.dataflow_params.template_params.create_shadow_tables)
     rfcStartDateTime                = var.dataflow_params.template_params.rfc_start_date_time
     fileReadConcurrency             = tostring(var.dataflow_params.template_params.file_read_concurrency)
-    deadLetterQueueDirectory        = var.dataflow_params.template_params.dead_letter_queue_directory != null ? var.common_params.dataflow_params.template_params.dead_letter_queue_directory : "${google_storage_bucket.datastream_bucket.url}/dlq"
+    deadLetterQueueDirectory        = var.dataflow_params.template_params.dead_letter_queue_directory != null ? var.dataflow_params.template_params.dead_letter_queue_directory : "${google_storage_bucket.datastream_bucket.url}/dlq"
     dlqRetryMinutes                 = tostring(var.dataflow_params.template_params.dlq_retry_minutes)
     dlqMaxRetryCount                = tostring(var.dataflow_params.template_params.dlq_max_retry_count)
     dataStreamRootUrl               = var.dataflow_params.template_params.datastream_root_url
@@ -307,7 +290,7 @@ resource "google_dataflow_flex_template_job" "live_migration_job" {
   enable_streaming_engine      = var.dataflow_params.runner_params.enable_streaming_engine
   kms_key_name                 = var.dataflow_params.runner_params.kms_key_name
   launcher_machine_type        = var.dataflow_params.runner_params.launcher_machine_type
-  machine_type                 = var.dataflow_params.runner_params.machine_type
+  machine_type                 = "n2-standard-4"
   max_workers                  = var.dataflow_params.runner_params.max_workers
   name                         = "${local.migration_id}-${var.dataflow_params.runner_params.job_name}"
   network                      = var.dataflow_params.runner_params.network

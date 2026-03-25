@@ -80,6 +80,28 @@ public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions,
 
   void setQps(Integer value);
 
+  @TemplateParameter.Integer(
+      order = 6,
+      optional = true,
+      description = "Base Tick Rate",
+      helpText =
+          "The baseline tick rate the pipeline uses to drive data generation operations. Default is 1000.")
+  @Default.Integer(1000)
+  Integer getBaseTickRate();
+
+  void setBaseTickRate(Integer value);
+
+  @TemplateParameter.Integer(
+      order = 7,
+      optional = true,
+      description = "Maximum Shards",
+      helpText =
+          "The maximum number of shards to distribute the generated data across. Default is 1.")
+  @Default.Integer(1)
+  Integer getMaxShards();
+
+  void setMaxShards(Integer value);
+
   enum SinkType {
     SPANNER,
     MYSQL

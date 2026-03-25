@@ -53,7 +53,7 @@ public class MySqlInformationSchemaScannerTest {
     // Mock column query
     when(stmt.executeQuery(
             "SELECT column_name, data_type, character_maximum_length, "
-                + "numeric_precision, numeric_scale, is_nullable, column_key "
+                + "numeric_precision, numeric_scale, is_nullable, column_key, EXTRA "
                 + "FROM information_schema.columns "
                 + "WHERE table_schema = 'testdb' AND table_name = 'users' "
                 + "ORDER BY ordinal_position"))
@@ -141,7 +141,7 @@ public class MySqlInformationSchemaScannerTest {
 
     when(stmt.executeQuery(
             "SELECT column_name, data_type, character_maximum_length, "
-                + "numeric_precision, numeric_scale, is_nullable, column_key "
+                + "numeric_precision, numeric_scale, is_nullable, column_key, EXTRA "
                 + "FROM information_schema.columns "
                 + "WHERE table_schema = 'testdb' AND table_name = 'empty_table' "
                 + "ORDER BY ordinal_position"))
@@ -205,7 +205,7 @@ public class MySqlInformationSchemaScannerTest {
 
     when(stmt.executeQuery(
             "SELECT column_name, data_type, character_maximum_length, "
-                + "numeric_precision, numeric_scale, is_nullable, column_key "
+                + "numeric_precision, numeric_scale, is_nullable, column_key, EXTRA "
                 + "FROM information_schema.columns "
                 + "WHERE table_schema = 'testdb' AND table_name = 'user$#@!' "
                 + "ORDER BY ordinal_position"))
@@ -297,7 +297,7 @@ public class MySqlInformationSchemaScannerTest {
     // Simulate SQLException when scanning columns
     when(stmt.executeQuery(
             "SELECT column_name, data_type, character_maximum_length, "
-                + "numeric_precision, numeric_scale, is_nullable, column_key "
+                + "numeric_precision, numeric_scale, is_nullable, column_key, EXTRA "
                 + "FROM information_schema.columns "
                 + "WHERE table_schema = 'testdb' AND table_name = 'users' "
                 + "ORDER BY ordinal_position"))
@@ -335,7 +335,7 @@ public class MySqlInformationSchemaScannerTest {
     // users table
     when(stmt.executeQuery(
             "SELECT column_name, data_type, character_maximum_length, "
-                + "numeric_precision, numeric_scale, is_nullable, column_key "
+                + "numeric_precision, numeric_scale, is_nullable, column_key, EXTRA "
                 + "FROM information_schema.columns "
                 + "WHERE table_schema = 'testdb' AND table_name = 'users' "
                 + "ORDER BY ordinal_position"))
@@ -379,7 +379,7 @@ public class MySqlInformationSchemaScannerTest {
     // orders table
     when(stmt.executeQuery(
             "SELECT column_name, data_type, character_maximum_length, "
-                + "numeric_precision, numeric_scale, is_nullable, column_key "
+                + "numeric_precision, numeric_scale, is_nullable, column_key, EXTRA "
                 + "FROM information_schema.columns "
                 + "WHERE table_schema = 'testdb' AND table_name = 'orders' "
                 + "ORDER BY ordinal_position"))
@@ -451,7 +451,7 @@ public class MySqlInformationSchemaScannerTest {
     // Columns
     when(stmt.executeQuery(
             "SELECT column_name, data_type, character_maximum_length, "
-                + "numeric_precision, numeric_scale, is_nullable, column_key "
+                + "numeric_precision, numeric_scale, is_nullable, column_key, EXTRA "
                 + "FROM information_schema.columns "
                 + "WHERE table_schema = 'testdb' AND table_name = 'child_table' "
                 + "ORDER BY ordinal_position"))
@@ -532,7 +532,7 @@ public class MySqlInformationSchemaScannerTest {
     // Columns
     when(stmt.executeQuery(
             "SELECT column_name, data_type, character_maximum_length, "
-                + "numeric_precision, numeric_scale, is_nullable, column_key "
+                + "numeric_precision, numeric_scale, is_nullable, column_key, EXTRA "
                 + "FROM information_schema.columns "
                 + "WHERE table_schema = 'testdb' AND table_name = 'users' "
                 + "ORDER BY ordinal_position"))
