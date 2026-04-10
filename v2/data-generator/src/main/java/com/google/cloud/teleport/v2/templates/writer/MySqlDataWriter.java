@@ -40,29 +40,46 @@ public class MySqlDataWriter implements DataWriter {
 
   @Override
   public void write(List<Row> rows, DataGeneratorTable table) {
+    write(rows, table, "");
+  }
+
+  public void write(List<Row> rows, DataGeneratorTable table, String shardId) {
     if (rows.isEmpty()) {
       return;
     }
-
     if (connectionHelper == null) {
-      connectionHelper = new JdbcConnectionHelper();
+      connectionHelper =
+          new com.google.cloud.teleport.v2.spanner.migrations.connection.JdbcConnectionHelper();
     }
-
-    // TODO: Resolve shard from the first row's _dg_shard_id and connect to it accurately
-    // As a placeholder, assuming a single shard configuration or fetching connection here:
-    // This will be expanded when Sharding routing is fully implemented.
-
     try {
       if (!connectionHelper.isConnectionPoolInitialized()) {
         ConnectionHelperRequest request = parseConnectionRequest(sinkOptionsJson);
         connectionHelper.init(request);
       }
 
-      // Hardcode key for now until we parse it from the Shard.
-      // The key format according to JdbcConnectionHelper is: sourceConnectionUrl + "/" + userName
-      org.json.JSONObject json = new org.json.JSONObject(sinkOptionsJson);
-      String jdbcUrl = json.optString("jdbcUrl", "");
-      String user = json.optString("username", "");
+      org.json.JSONArray jsonArray = new org.json.JSONArray(sinkOptionsJson);
+      org.json.JSONObject targetShardJson = null;
+
+      if (!shardId.isEmpty()) {
+        for (int i = 0; i < jsonArray.length(); i++) {
+          org.json.JSONObject shardJson = jsonArray.getJSONObject(i);
+          if (shardId.equals(shardJson.optString("logicalShardId", ""))) {
+            targetShardJson = shardJson;
+            break;
+          }
+        }
+      }
+
+      if (targetShardJson == null) {
+        // Fallback to first shard if not found or shardId is empty
+        targetShardJson = jsonArray.getJSONObject(0);
+      }
+
+      String user = targetShardJson.optString("user", "");
+      String host = targetShardJson.optString("host", "");
+      String port = targetShardJson.optString("port", "3306");
+      String dbName = targetShardJson.optString("dbName", "");
+      String jdbcUrl = String.format("jdbc:mysql://%s:%s/%s", host, port, dbName);
       String connectionKey = jdbcUrl + "/" + user;
 
       try (Connection connection = connectionHelper.getConnection(connectionKey)) {
@@ -125,34 +142,41 @@ public class MySqlDataWriter implements DataWriter {
     }
   }
 
-  private ConnectionHelperRequest parseConnectionRequest(String sinkOptionsJson) {
+  ConnectionHelperRequest parseConnectionRequest(String sinkOptionsJson) {
     try {
-      org.json.JSONObject json = new org.json.JSONObject(sinkOptionsJson);
-      String jdbcUrl = json.optString("jdbcUrl", "");
-      String user = json.optString("username", "");
-      String password = json.optString("password", "");
+      org.json.JSONArray jsonArray = new org.json.JSONArray(sinkOptionsJson);
+      if (jsonArray.length() == 0) {
+        throw new RuntimeException("No shards found in sink options");
+      }
 
-      com.google.cloud.teleport.v2.spanner.migrations.shard.Shard shard =
-          new com.google.cloud.teleport.v2.spanner.migrations.shard.Shard();
-      shard.setLogicalShardId("shard0");
-      shard.setUser(user);
-      shard.setPassword(password);
-      // JdbcConnectionHelper reconstructs jdbcUrl from Shard Host/Port/DB
-      // For now we'll cheat or we need to parse jdbcUrl:
-      // Assuming jdbc:mysql://host:port/db
-      String cleanUrl = jdbcUrl.replace("jdbc:mysql://", "");
-      String[] parts = cleanUrl.split("/");
-      shard.setDbName(parts.length > 1 ? parts[1] : "");
-      String[] hostPort = parts[0].split(":");
-      shard.setHost(hostPort[0]);
-      shard.setPort(hostPort.length > 1 ? hostPort[1] : "3306");
+      List<com.google.cloud.teleport.v2.spanner.migrations.shard.Shard> shards =
+          new java.util.ArrayList<>();
+
+      for (int i = 0; i < jsonArray.length(); i++) {
+        org.json.JSONObject shardJson = jsonArray.getJSONObject(i);
+        String user = shardJson.optString("user", "");
+        String password = shardJson.optString("password", "");
+        String host = shardJson.optString("host", "");
+        String port = shardJson.optString("port", "3306");
+        String dbName = shardJson.optString("dbName", "");
+        String connectionProperties = shardJson.optString("connectionProperties", "");
+
+        com.google.cloud.teleport.v2.spanner.migrations.shard.Shard shard =
+            new com.google.cloud.teleport.v2.spanner.migrations.shard.Shard();
+        shard.setLogicalShardId(shardJson.optString("logicalShardId", "shard" + i));
+        shard.setUser(user);
+        shard.setPassword(password);
+        shard.setHost(host);
+        shard.setPort(port);
+        shard.setDbName(dbName);
+        shard.setConnectionProperties(connectionProperties);
+        shards.add(shard);
+      }
 
       // Default to 10 connections per pool for now. Can be configured later.
-      return new ConnectionHelperRequest(
-          java.util.Collections.singletonList(shard), "", 10, "com.mysql.cj.jdbc.Driver", "");
+      return new ConnectionHelperRequest(shards, "", 10, "com.mysql.cj.jdbc.Driver", "");
     } catch (Exception e) {
-      LOG.error("Failed to parse sinkOptionsJson for MySQL connection: {}", sinkOptionsJson, e);
-      throw new RuntimeException("Invalid sink configurations", e);
+      throw new RuntimeException("Failed to parse connection request", e);
     }
   }
 

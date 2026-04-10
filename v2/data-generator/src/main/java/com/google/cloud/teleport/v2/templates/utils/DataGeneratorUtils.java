@@ -43,7 +43,7 @@ public class DataGeneratorUtils {
         int len = (size != null && size > 0 && size < 1000) ? size.intValue() : 20;
         return faker.lorem().characters(len);
       case INT64:
-        return faker.number().randomNumber();
+        return faker.number().numberBetween(1_000_000_000L, 2_147_483_647L);
       case FLOAT64:
         return faker.number().randomDouble(2, Short.MIN_VALUE, Short.MAX_VALUE);
       case NUMERIC:

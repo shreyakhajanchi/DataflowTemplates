@@ -16,6 +16,9 @@
 package com.google.cloud.teleport.v2.templates.transforms;
 
 import com.github.javafaker.Faker;
+import com.google.cloud.teleport.v2.spanner.migrations.shard.Shard;
+import com.google.cloud.teleport.v2.spanner.migrations.utils.SecretManagerAccessorImpl;
+import com.google.cloud.teleport.v2.spanner.migrations.utils.ShardFileReader;
 import com.google.cloud.teleport.v2.templates.DataGeneratorOptions;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
@@ -27,6 +30,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import org.apache.beam.sdk.metrics.Counter;
 import org.apache.beam.sdk.metrics.Metrics;
 import org.apache.beam.sdk.schemas.Schema;
@@ -79,6 +83,7 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
     protected transient DataWriter writer;
     protected transient Faker faker;
     private transient DataGeneratorSchema schema;
+    private transient List<String> logicalShardIds;
     // Buffer: TableName -> List of Rows
     private transient Map<String, List<Row>> buffers;
     // Map to keep track of DataGeneratorTable objects for flushing
@@ -119,6 +124,14 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
         if ("MYSQL".equalsIgnoreCase(sinkType)) {
           this.writer =
               new com.google.cloud.teleport.v2.templates.writer.MySqlDataWriter(sinkOptionsJson);
+          try {
+            ShardFileReader shardFileReader = new ShardFileReader(new SecretManagerAccessorImpl());
+            List<Shard> shards = shardFileReader.getOrderedShardDetails(sinkOptionsPath);
+            this.logicalShardIds =
+                shards.stream().map(Shard::getLogicalShardId).collect(Collectors.toList());
+          } catch (Exception e) {
+            throw new RuntimeException("Failed to read shards from " + sinkOptionsPath, e);
+          }
         } else {
           this.writer =
               new com.google.cloud.teleport.v2.templates.writer.SpannerDataWriter(sinkOptionsJson);
@@ -183,9 +196,19 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       Row fullRow = completeRow(table, row);
 
       // 1. Buffer Row for current record
-      buffers.computeIfAbsent(tableName, k -> new ArrayList<>()).add(fullRow);
-      if (buffers.get(tableName).size() >= batchSize) {
-        flush(tableName);
+      String shardId = "";
+      if ("MYSQL".equalsIgnoreCase(sinkType)
+          && logicalShardIds != null
+          && !logicalShardIds.isEmpty()) {
+        shardId =
+            logicalShardIds.get(
+                java.util.concurrent.ThreadLocalRandom.current().nextInt(logicalShardIds.size()));
+      }
+      String bufferKey = shardId.isEmpty() ? tableName : tableName + "#" + shardId;
+
+      buffers.computeIfAbsent(bufferKey, k -> new ArrayList<>()).add(fullRow);
+      if (buffers.get(bufferKey).size() >= batchSize) {
+        flush(bufferKey);
       }
 
       // 2. Process Children (Cascading Generation)
@@ -335,9 +358,9 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
     @FinishBundle
     public void finishBundle() {
       System.out.println("FinishBundle called");
-      for (String tableName : buffers.keySet()) {
-        if (!buffers.get(tableName).isEmpty()) {
-          flush(tableName);
+      for (String bufferKey : buffers.keySet()) {
+        if (!buffers.get(bufferKey).isEmpty()) {
+          flush(bufferKey);
         }
       }
     }
@@ -353,12 +376,23 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       }
     }
 
-    private void flush(String tableName) {
-      List<Row> batch = buffers.get(tableName);
+    private void flush(String bufferKey) {
+      String[] parts = bufferKey.split("#");
+      String tableName = parts[0];
+      String shardId = parts.length > 1 ? parts[1] : "";
+      List<Row> batch = buffers.get(bufferKey);
       if (batch != null && !batch.isEmpty()) {
-        writer.write(batch, tableMap.get(tableName));
+        if ("MYSQL".equalsIgnoreCase(sinkType)) {
+          ((com.google.cloud.teleport.v2.templates.writer.MySqlDataWriter) writer)
+              .write(batch, tableMap.get(tableName), shardId);
+        } else {
+          writer.write(batch, tableMap.get(tableName));
+        }
         batchesWritten.inc();
         recordsWritten.inc(batch.size());
+        if (!shardId.isEmpty()) {
+          Metrics.counter(BatchAndWriteFn.class, "recordsWritten_" + shardId).inc(batch.size());
+        }
         batch.clear();
       }
     }
