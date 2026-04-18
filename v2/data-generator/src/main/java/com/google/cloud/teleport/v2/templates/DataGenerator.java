@@ -29,10 +29,8 @@ import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.DoFn;
-import org.apache.beam.sdk.transforms.MapElements;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.Reshuffle;
-import org.apache.beam.sdk.transforms.SimpleFunction;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionView;
@@ -69,11 +67,14 @@ public class DataGenerator {
         .registerCoderForClass(
             Row.class, org.apache.beam.sdk.coders.SerializableCoder.of(Row.class));
 
-    // Fetch schema as side input
     PCollectionView<DataGeneratorSchema> schemaView =
         pipeline.apply(
             "LoadSchema",
-            new SchemaLoader(options.getSinkType(), options.getSinkOptions(), options.getQps()));
+            new SchemaLoader(
+                options.getSinkType(),
+                options.getSinkOptions(),
+                options.getInsertQps(),
+                options.getSchemaConfig()));
 
     // Generate ticks based on schema QPS
     int baseTickRate = options.getBaseTickRate() != null ? options.getBaseTickRate() : 1000;
@@ -90,7 +91,10 @@ public class DataGenerator {
     // Generate Primary Keys
     int maxShards = options.getMaxShards() != null ? options.getMaxShards() : 1;
     PCollection<KV<String, Row>> pendingRows =
-        ticks.apply("GeneratePrimaryKey", new GeneratePrimaryKey(maxShards));
+        ticks.apply(
+            "GeneratePrimaryKey",
+            new GeneratePrimaryKey(
+                maxShards, options.getSinkOptions(), options.getSinkType().name()));
 
     // Reshuffle based on Hash(TableName + PK) to ensure same PK goes to same worker
     // Key = Hash(TableName + PK) % 5000
@@ -99,25 +103,17 @@ public class DataGenerator {
             .apply(
                 "MapToReshuffleKey",
                 ParDo.of(
-                    new DoFn<KV<String, Row>, KV<Integer, KV<String, Row>>>() {
+                    new DoFn<KV<String, Row>, KV<String, Row>>() {
                       @ProcessElement
                       public void processElement(ProcessContext c) {
                         String tableName = c.element().getKey();
                         Row pkValues = c.element().getValue();
                         int hash = (tableName + pkValues.toString()).hashCode();
-                        c.output(KV.of(Math.abs(hash % 5000), c.element()));
+                        int shard = Math.abs(hash % 50);
+                        c.output(KV.of(tableName + "#" + shard, pkValues));
                       }
                     }))
-            .apply("Reshuffle", Reshuffle.of())
-            .apply(
-                "StripReshuffleKey",
-                MapElements.via(
-                    new SimpleFunction<KV<Integer, KV<String, Row>>, KV<String, Row>>() {
-                      @Override
-                      public KV<String, Row> apply(KV<Integer, KV<String, Row>> element) {
-                        return element.getValue();
-                      }
-                    }));
+            .apply("Reshuffle", Reshuffle.of());
 
     reshuffledRows.apply(
         "BatchAndWrite",

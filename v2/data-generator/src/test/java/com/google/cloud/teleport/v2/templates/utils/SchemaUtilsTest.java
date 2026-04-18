@@ -42,9 +42,9 @@ public class SchemaUtilsTest {
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .qps(10)
+            .insertQps(10)
             .isRoot(false) // Default false, should be set to true
-            .children(ImmutableList.of())
+            .childTables(ImmutableList.of())
             .build();
 
     DataGeneratorTable child =
@@ -61,9 +61,9 @@ public class SchemaUtilsTest {
                         .referencedColumns(ImmutableList.of("id"))
                         .build()))
             .uniqueKeys(ImmutableList.of())
-            .qps(10)
+            .insertQps(10)
             .isRoot(true) // Should be set to false
-            .children(ImmutableList.of())
+            .childTables(ImmutableList.of())
             .build();
 
     DataGeneratorSchema schema =
@@ -79,9 +79,9 @@ public class SchemaUtilsTest {
 
     assertTrue(newParent.isRoot());
     assertFalse(newChild.isRoot());
-    assertEquals(1, newParent.children().size());
-    assertEquals("Child", newParent.children().get(0));
-    assertEquals(0, newChild.children().size());
+    assertEquals(1, newParent.childTables().size());
+    assertEquals("Child", newParent.childTables().get(0));
+    assertEquals(0, newChild.childTables().size());
   }
 
   @Test
@@ -94,7 +94,7 @@ public class SchemaUtilsTest {
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .qps(10)
+            .insertQps(10)
             .isRoot(false)
             .build();
 
@@ -105,7 +105,7 @@ public class SchemaUtilsTest {
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .qps(100)
+            .insertQps(100)
             .isRoot(false)
             .build();
 
@@ -129,7 +129,7 @@ public class SchemaUtilsTest {
                         .referencedColumns(ImmutableList.of("id"))
                         .build()))
             .uniqueKeys(ImmutableList.of())
-            .qps(200)
+            .insertQps(200)
             .isRoot(false)
             .build();
 
@@ -150,14 +150,14 @@ public class SchemaUtilsTest {
     assertFalse(newChild.isRoot());
 
     // P1 should have P2
-    assertEquals(1, newP1.children().size());
-    assertEquals("P2", newP1.children().get(0));
+    assertEquals(1, newP1.childTables().size());
+    assertEquals("P2", newP1.childTables().get(0));
 
     // P2 should have Child
-    assertEquals(1, newP2.children().size());
-    assertEquals("Child", newP2.children().get(0));
+    assertEquals(1, newP2.childTables().size());
+    assertEquals("Child", newP2.childTables().get(0));
 
-    assertEquals(0, newChild.children().size());
+    assertEquals(0, newChild.childTables().size());
   }
 
   @Test
@@ -169,7 +169,7 @@ public class SchemaUtilsTest {
     DataGeneratorTable interleavedParent =
         DataGeneratorTable.builder()
             .name("InterleavedParent")
-            .qps(100)
+            .insertQps(100)
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
@@ -178,7 +178,7 @@ public class SchemaUtilsTest {
     DataGeneratorTable otherParent =
         DataGeneratorTable.builder()
             .name("OtherParent")
-            .qps(1)
+            .insertQps(1)
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
@@ -197,7 +197,7 @@ public class SchemaUtilsTest {
                         .referencedTable("OtherParent")
                         .referencedColumns(ImmutableList.of("id"))
                         .build()))
-            .qps(10)
+            .insertQps(10)
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
@@ -218,13 +218,14 @@ public class SchemaUtilsTest {
 
     DataGeneratorSchema dagSchema = SchemaUtils.setSchemaDAG(schema);
 
-    assertTrue(dagSchema.tables().get("InterleavedParent").isRoot());
+    assertFalse(dagSchema.tables().get("InterleavedParent").isRoot());
     assertTrue(dagSchema.tables().get("OtherParent").isRoot());
     assertFalse(dagSchema.tables().get("Child").isRoot());
 
-    assertEquals(1, dagSchema.tables().get("InterleavedParent").children().size());
-    assertEquals("Child", dagSchema.tables().get("InterleavedParent").children().get(0));
-    assertEquals(0, dagSchema.tables().get("OtherParent").children().size());
+    assertEquals(1, dagSchema.tables().get("OtherParent").childTables().size());
+    assertEquals("InterleavedParent", dagSchema.tables().get("OtherParent").childTables().get(0));
+    assertEquals(1, dagSchema.tables().get("InterleavedParent").childTables().size());
+    assertEquals("Child", dagSchema.tables().get("InterleavedParent").childTables().get(0));
   }
 
   @Test
@@ -237,7 +238,7 @@ public class SchemaUtilsTest {
     DataGeneratorTable p1 =
         DataGeneratorTable.builder()
             .name("P1")
-            .qps(10)
+            .insertQps(10)
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
@@ -246,7 +247,7 @@ public class SchemaUtilsTest {
     DataGeneratorTable p2 =
         DataGeneratorTable.builder()
             .name("P2")
-            .qps(100)
+            .insertQps(100)
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
@@ -255,7 +256,7 @@ public class SchemaUtilsTest {
     DataGeneratorTable c1 =
         DataGeneratorTable.builder()
             .name("C1")
-            .qps(20)
+            .insertQps(20)
             .foreignKeys(
                 ImmutableList.of(
                     DataGeneratorForeignKey.builder()
@@ -277,7 +278,7 @@ public class SchemaUtilsTest {
     DataGeneratorTable c2 =
         DataGeneratorTable.builder()
             .name("C2")
-            .qps(30)
+            .insertQps(30)
             .foreignKeys(
                 ImmutableList.of(
                     DataGeneratorForeignKey.builder()
@@ -293,7 +294,7 @@ public class SchemaUtilsTest {
     DataGeneratorTable gc1 =
         DataGeneratorTable.builder()
             .name("GC1")
-            .qps(40)
+            .insertQps(40)
             .foreignKeys(
                 ImmutableList.of(
                     DataGeneratorForeignKey.builder()
@@ -321,16 +322,16 @@ public class SchemaUtilsTest {
     assertFalse(dagSchema.tables().get("C2").isRoot());
     assertFalse(dagSchema.tables().get("GC1").isRoot());
 
-    assertEquals(1, dagSchema.tables().get("P1").children().size());
-    assertEquals("P2", dagSchema.tables().get("P1").children().get(0)); // P1 -> P2 sequence
+    assertEquals(1, dagSchema.tables().get("P1").childTables().size());
+    assertEquals("P2", dagSchema.tables().get("P1").childTables().get(0)); // P1 -> P2 sequence
 
-    assertEquals(2, dagSchema.tables().get("P2").children().size());
-    assertTrue(dagSchema.tables().get("P2").children().contains("C1")); // P2 -> C1 sequence
-    assertTrue(dagSchema.tables().get("P2").children().contains("C2")); // P2 -> C2 direct
+    assertEquals(2, dagSchema.tables().get("P2").childTables().size());
+    assertTrue(dagSchema.tables().get("P2").childTables().contains("C1")); // P2 -> C1 sequence
+    assertTrue(dagSchema.tables().get("P2").childTables().contains("C2")); // P2 -> C2 direct
 
-    assertEquals(1, dagSchema.tables().get("C1").children().size());
-    assertEquals("GC1", dagSchema.tables().get("C1").children().get(0));
-    assertEquals(0, dagSchema.tables().get("C2").children().size());
-    assertEquals(0, dagSchema.tables().get("GC1").children().size());
+    assertEquals(1, dagSchema.tables().get("C1").childTables().size());
+    assertEquals("GC1", dagSchema.tables().get("C1").childTables().get(0));
+    assertEquals(0, dagSchema.tables().get("C2").childTables().size());
+    assertEquals(0, dagSchema.tables().get("GC1").childTables().size());
   }
 }

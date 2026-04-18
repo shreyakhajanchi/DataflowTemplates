@@ -48,36 +48,35 @@ public class SchemaUtils {
     for (DataGeneratorTable childTable : tableMap.values()) {
       String childName = childTable.name();
 
-      // Interleaved Parent takes precedence
+      // Collect Parents (Interleaved and FK)
+      List<DataGeneratorTable> parents = new ArrayList<>();
+
       if (childTable.interleavedInTable() != null) {
         String parentName = childTable.interleavedInTable();
-        if (tableMap.containsKey(parentName)) {
-          parentToSequenceChild.computeIfAbsent(parentName, k -> new ArrayList<>()).add(childName);
-          hasSequenceParent.add(childName);
+        DataGeneratorTable parentTable = tableMap.get(parentName);
+        if (parentTable != null) {
+          parents.add(parentTable);
         }
-        continue; // Interleaving defines the sole sequence parent
       }
 
-      // Collect Foreign Key Parents
-      List<DataGeneratorTable> fkParents = new ArrayList<>();
       for (DataGeneratorForeignKey fk : childTable.foreignKeys()) {
         DataGeneratorTable parentTable = tableMap.get(fk.referencedTable());
-        if (parentTable != null) {
-          fkParents.add(parentTable);
+        if (parentTable != null && !parents.contains(parentTable)) {
+          parents.add(parentTable);
         }
       }
 
-      if (fkParents.isEmpty()) {
+      if (parents.isEmpty()) {
         continue; // No parents for this table
       }
 
-      // Sort FK Parents by QPS
-      fkParents.sort(java.util.Comparator.comparingInt(DataGeneratorTable::qps));
+      // Sort Parents by QPS
+      parents.sort(java.util.Comparator.comparingInt(DataGeneratorTable::insertQps));
 
-      // Chain the FK Parents: P1 -> P2 -> ... -> Pn -> Child
-      for (int i = 0; i < fkParents.size() - 1; i++) {
-        String currentParentName = fkParents.get(i).name();
-        String nextParentName = fkParents.get(i + 1).name();
+      // Chain the Parents: P1 -> P2 -> ... -> Pn -> Child
+      for (int i = 0; i < parents.size() - 1; i++) {
+        String currentParentName = parents.get(i).name();
+        String nextParentName = parents.get(i + 1).name();
         // Avoid adding duplicate dependencies if a table is part of multiple chains
         List<String> currentChildren =
             parentToSequenceChild.computeIfAbsent(currentParentName, k -> new ArrayList<>());
@@ -88,7 +87,7 @@ public class SchemaUtils {
       }
 
       // Link the last parent in the chain to the child table
-      String lastParentName = fkParents.get(fkParents.size() - 1).name();
+      String lastParentName = parents.get(parents.size() - 1).name();
       List<String> lastParentChildren =
           parentToSequenceChild.computeIfAbsent(lastParentName, k -> new ArrayList<>());
       if (!lastParentChildren.contains(childName)) {
@@ -108,7 +107,7 @@ public class SchemaUtils {
       newTablesBuilder.put(
           tableName,
           table.toBuilder()
-              .children(
+              .childTables(
                   ImmutableList.copyOf(
                       sequenceChildren)) // These are tables to generate AFTER this one
               .isRoot(isRoot)

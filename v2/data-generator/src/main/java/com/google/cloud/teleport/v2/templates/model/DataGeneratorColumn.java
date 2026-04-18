@@ -53,12 +53,26 @@ public abstract class DataGeneratorColumn implements Serializable {
   @Nullable
   public abstract Integer scale();
 
-  // TODO: Add field for generation rule configuration here once data config is
-  // supported.
+  /** The allowed values for ENUM type. */
+  @Nullable
+  public abstract java.util.List<String> enumValues();
+
+  /** The element type for ARRAY type. */
+  @Nullable
+  public abstract LogicalType elementType();
+
+  /** The custom generator for this column (e.g., Faker expression). */
+  @Nullable
+  public abstract String generator();
+
+  /** Whether to skip data generation for this column. */
+  public abstract boolean skip();
 
   public static Builder builder() {
-    return new AutoValue_DataGeneratorColumn.Builder();
+    return new AutoValue_DataGeneratorColumn.Builder().skip(false);
   }
+
+  public abstract Builder toBuilder();
 
   @AutoValue.Builder
   public abstract static class Builder {
@@ -79,6 +93,14 @@ public abstract class DataGeneratorColumn implements Serializable {
     public abstract Builder precision(Integer precision);
 
     public abstract Builder scale(Integer scale);
+
+    public abstract Builder enumValues(java.util.List<String> enumValues);
+
+    public abstract Builder elementType(LogicalType elementType);
+
+    public abstract Builder generator(String generator);
+
+    public abstract Builder skip(boolean skip);
 
     public abstract DataGeneratorColumn build();
   }

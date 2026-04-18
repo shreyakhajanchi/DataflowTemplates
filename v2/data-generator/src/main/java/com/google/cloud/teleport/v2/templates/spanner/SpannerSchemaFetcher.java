@@ -143,7 +143,7 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
         .foreignKeys(fksBuilder.build())
         .uniqueKeys(uniqueKeysBuilder.build())
         .isRoot(table.interleavingParent() == null)
-        .qps(qps)
+        .insertQps(qps)
         .build();
   }
 

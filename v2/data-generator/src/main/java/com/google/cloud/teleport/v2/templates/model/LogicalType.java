@@ -27,5 +27,7 @@ public enum LogicalType {
   NUMERIC,
   JSON,
   ARRAY,
-  STRUCT
+  STRUCT,
+  UUID,
+  ENUM
 }

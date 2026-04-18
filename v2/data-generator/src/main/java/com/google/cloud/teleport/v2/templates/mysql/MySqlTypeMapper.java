@@ -74,9 +74,10 @@ public class MySqlTypeMapper implements TypeMapper {
       case "TEXT":
       case "MEDIUMTEXT":
       case "LONGTEXT":
-      case "ENUM": // Added
       case "SET": // Added
         return LogicalType.STRING;
+      case "ENUM": // Added
+        return LogicalType.ENUM;
 
       case "BINARY":
       case "VARBINARY":

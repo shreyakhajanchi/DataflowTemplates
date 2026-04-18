@@ -159,22 +159,44 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
         .foreignKeys(foreignKeysBuilder.build())
         .uniqueKeys(uniqueKeysBuilder.build())
         .isRoot(true)
-        .qps(qps)
+        .insertQps(qps)
         .build();
   }
 
   private DataGeneratorColumn mapSourceColumn(SourceColumn column, SinkDialect dialect) {
-    return DataGeneratorColumn.builder()
-        .name(column.name())
-        .logicalType(typeMapper.getLogicalType(column.type(), dialect, column.size()))
-        .isNullable(column.isNullable())
-        .isPrimaryKey(column.isPrimaryKey())
-        .isGenerated(column.isGenerated())
-        .originalType(column.type())
-        .size(column.size())
-        .precision(column.precision())
-        .scale(column.scale())
-        .build();
+    DataGeneratorColumn.Builder builder =
+        DataGeneratorColumn.builder()
+            .name(column.name())
+            .logicalType(typeMapper.getLogicalType(column.type(), dialect, column.size()))
+            .isNullable(column.isNullable())
+            .isPrimaryKey(column.isPrimaryKey())
+            .isGenerated(column.isGenerated())
+            .originalType(column.type())
+            .size(column.size())
+            .precision(column.precision())
+            .scale(column.scale());
+
+    if (column.type() != null
+        && (column.type().toUpperCase().startsWith("ENUM")
+            || column.type().toUpperCase().startsWith("SET"))) {
+      builder.enumValues(parseEnumValues(column.type()));
+    }
+
+    return builder.build();
+  }
+
+  private java.util.List<String> parseEnumValues(String type) {
+    java.util.List<String> values = new java.util.ArrayList<>();
+    if (type == null || !type.contains("(")) {
+      return values;
+    }
+    String content = type.substring(type.indexOf("(") + 1, type.lastIndexOf(")"));
+    // Split by comma, assuming standard MySQL format 'a','b','c'
+    String[] parts = content.split(",");
+    for (String part : parts) {
+      values.add(part.trim().replace("'", ""));
+    }
+    return values;
   }
 
   protected Connection getConnection() throws SQLException {

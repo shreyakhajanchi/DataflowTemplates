@@ -101,14 +101,14 @@ public class SelectTable extends PTransform<PCollection<Long>, PCollection<DataG
       // 1. Calculate Total QPS for Root tables
       for (DataGeneratorTable table : schema.tables().values()) {
         if (table.isRoot()) {
-          totalRootQps += table.qps();
+          totalRootQps += table.insertQps();
         }
       }
 
       // 2. Build Selection Map based on Root tables
       for (DataGeneratorTable table : schema.tables().values()) {
         if (table.isRoot()) {
-          double weight = table.qps();
+          double weight = table.insertQps();
           if (totalRootQps > 0) {
             double probability = weight / totalRootQps;
             double previousMax = tableSelectionMap.isEmpty() ? 0.0 : tableSelectionMap.lastKey();

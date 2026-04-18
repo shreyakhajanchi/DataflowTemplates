@@ -16,8 +16,12 @@
 package com.google.cloud.teleport.v2.templates.transforms;
 
 import com.github.javafaker.Faker;
+import com.google.cloud.teleport.v2.spanner.migrations.shard.Shard;
+import com.google.cloud.teleport.v2.spanner.migrations.utils.SecretManagerAccessorImpl;
+import com.google.cloud.teleport.v2.spanner.migrations.utils.ShardFileReader;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
+import com.google.cloud.teleport.v2.templates.utils.Constants;
 import com.google.cloud.teleport.v2.templates.utils.DataGeneratorUtils;
 import java.util.List;
 import java.util.Random;
@@ -39,15 +43,21 @@ public class GeneratePrimaryKey
     extends PTransform<PCollection<DataGeneratorTable>, PCollection<KV<String, Row>>> {
 
   private final int maxShards;
+  private final String sinkOptionsPath;
+  private final String sinkType;
 
-  public GeneratePrimaryKey(int maxShards) {
+  public GeneratePrimaryKey(int maxShards, String sinkOptionsPath, String sinkType) {
     this.maxShards = maxShards;
+    this.sinkOptionsPath = sinkOptionsPath;
+    this.sinkType = sinkType;
   }
 
   @Override
   public PCollection<KV<String, Row>> expand(PCollection<DataGeneratorTable> input) {
     return input
-        .apply("GeneratePrimaryKey", ParDo.of(new GeneratePrimaryKeyFn(maxShards)))
+        .apply(
+            "GeneratePrimaryKey",
+            ParDo.of(new GeneratePrimaryKeyFn(maxShards, sinkOptionsPath, sinkType)))
         .setCoder(
             KvCoder.of(
                 org.apache.beam.sdk.coders.StringUtf8Coder.of(),
@@ -55,19 +65,35 @@ public class GeneratePrimaryKey
   }
 
   static class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Row>> {
-    public static final String SHARD_ID_COLUMN_NAME = "_dg_shard_id";
     private final int maxShards;
+    private final String sinkOptionsPath;
+    private final String sinkType;
     private transient Faker faker;
     private transient Random random;
+    private transient List<String> logicalShardIds;
 
-    public GeneratePrimaryKeyFn(int maxShards) {
+    public GeneratePrimaryKeyFn(int maxShards, String sinkOptionsPath, String sinkType) {
       this.maxShards = maxShards;
+      this.sinkOptionsPath = sinkOptionsPath;
+      this.sinkType = sinkType;
     }
 
     @Setup
     public void setup() {
-      faker = new Faker();
-      random = new Random();
+      java.security.SecureRandom secureRandom = new java.security.SecureRandom();
+      faker = new Faker(new java.util.Random(secureRandom.nextLong()));
+      random = new java.util.Random(secureRandom.nextLong());
+
+      if (Constants.SINK_TYPE_MYSQL.equalsIgnoreCase(sinkType) && sinkOptionsPath != null) {
+        try {
+          ShardFileReader shardFileReader = new ShardFileReader(new SecretManagerAccessorImpl());
+          List<Shard> shards = shardFileReader.getOrderedShardDetails(sinkOptionsPath);
+          this.logicalShardIds =
+              shards.stream().map(Shard::getLogicalShardId).collect(Collectors.toList());
+        } catch (Exception e) {
+          throw new RuntimeException("Failed to read shards from " + sinkOptionsPath, e);
+        }
+      }
     }
 
     @ProcessElement
@@ -92,7 +118,12 @@ public class GeneratePrimaryKey
       }
 
       // Add logical shard ID
-      String shardId = "shard" + random.nextInt(maxShards);
+      String shardId = "";
+      if (logicalShardIds != null && !logicalShardIds.isEmpty()) {
+        shardId = logicalShardIds.get(random.nextInt(logicalShardIds.size()));
+      } else {
+        shardId = "shard" + random.nextInt(maxShards);
+      }
       rowBuilder.addValue(shardId);
 
       out.output(KV.of(table.name(), rowBuilder.build()));
@@ -104,11 +135,9 @@ public class GeneratePrimaryKey
         builder.addField(
             Schema.Field.of(col.name(), DataGeneratorUtils.mapToBeamFieldType(col.logicalType())));
       }
-      builder.addField(Schema.Field.of(SHARD_ID_COLUMN_NAME, Schema.FieldType.STRING));
+      builder.addField(Schema.Field.of(Constants.SHARD_ID_COLUMN_NAME, Schema.FieldType.STRING));
       return builder.build();
     }
-
-    // Removed mapToFieldType as it is now in DataGeneratorUtils
 
     private Object generateValue(DataGeneratorColumn column) {
       return DataGeneratorUtils.generateValue(column, faker);

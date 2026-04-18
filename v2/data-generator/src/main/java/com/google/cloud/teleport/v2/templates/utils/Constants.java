@@ -13,22 +13,23 @@
  * License for the specific language governing permissions and limitations under
  * the License.
  */
-package com.google.cloud.teleport.v2.templates.writer;
+package com.google.cloud.teleport.v2.templates.utils;
 
-import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
-import java.util.List;
-import org.apache.beam.sdk.values.Row;
+/** Constants used across the Data Generator template. */
+public class Constants {
 
-/** Interface for writing data to a sink. */
-public interface DataWriter extends AutoCloseable {
-  void write(List<Row> rows, DataGeneratorTable table);
+  public static final String SHARD_ID_COLUMN_NAME = "_dg_shard_id";
 
-  default void write(List<Row> rows, DataGeneratorTable table, String shardId, String operation) {
-    write(rows, table);
-  }
+  // Mutation Types
+  public static final String MUTATION_INSERT = "INSERT";
+  public static final String MUTATION_UPDATE = "UPDATE";
+  public static final String MUTATION_DELETE = "DELETE";
 
-  @Override
-  default void close() {
-    // Default no-op
+  // Sink Types
+  public static final String SINK_TYPE_MYSQL = "MYSQL";
+  public static final String SINK_TYPE_SPANNER = "SPANNER";
+
+  private Constants() {
+    // Prevent instantiation
   }
 }

@@ -68,7 +68,7 @@ public class GenerateTicks extends PTransform<PCollection<Long>, PCollection<Lon
         int totalQps = 0;
         for (DataGeneratorTable table : schema.tables().values()) {
           if (table.isRoot()) {
-            totalQps += table.qps();
+            totalQps += table.insertQps();
           }
         }
         cachedTotalQps = totalQps;

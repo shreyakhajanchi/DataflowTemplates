@@ -73,15 +73,35 @@ public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions,
   @TemplateParameter.Integer(
       order = 5,
       optional = true,
-      description = "QPS per table",
-      helpText = "The target QPS for each table. Default is 1000.")
+      description = "Insert QPS per table",
+      helpText = "The target Insert QPS for each table. Default is 1000.")
   @Default.Integer(1000)
-  Integer getQps();
+  Integer getInsertQps();
 
-  void setQps(Integer value);
+  void setInsertQps(Integer value);
 
   @TemplateParameter.Integer(
       order = 6,
+      optional = true,
+      description = "Update QPS per table",
+      helpText = "The target Update QPS for each table. Default is 0.")
+  @Default.Integer(0)
+  Integer getUpdateQps();
+
+  void setUpdateQps(Integer value);
+
+  @TemplateParameter.Integer(
+      order = 7,
+      optional = true,
+      description = "Delete QPS per table",
+      helpText = "The target Delete QPS for each table. Default is 0.")
+  @Default.Integer(0)
+  Integer getDeleteQps();
+
+  void setDeleteQps(Integer value);
+
+  @TemplateParameter.Integer(
+      order = 8,
       optional = true,
       description = "Base Tick Rate",
       helpText =
@@ -92,7 +112,7 @@ public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions,
   void setBaseTickRate(Integer value);
 
   @TemplateParameter.Integer(
-      order = 7,
+      order = 9,
       optional = true,
       description = "Maximum Shards",
       helpText =
@@ -101,6 +121,16 @@ public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions,
   Integer getMaxShards();
 
   void setMaxShards(Integer value);
+
+  @TemplateParameter.GcsReadFile(
+      order = 10,
+      optional = true,
+      description = "Schema Config JSON File Path",
+      helpText = "GCS Path to a file containing JSON overrides for data generation.",
+      example = "gs://your-bucket/path/to/schema_config.json")
+  String getSchemaConfig();
+
+  void setSchemaConfig(String value);
 
   enum SinkType {
     SPANNER,

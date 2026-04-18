@@ -52,7 +52,7 @@ public class SelectTableTest {
     DataGeneratorTable tableA =
         DataGeneratorTable.builder()
             .name("A")
-            .qps(10)
+            .insertQps(10)
             .isRoot(true)
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
@@ -63,7 +63,7 @@ public class SelectTableTest {
     DataGeneratorTable tableB =
         DataGeneratorTable.builder()
             .name("B")
-            .qps(100)
+            .insertQps(100)
             .isRoot(false)
             .interleavedInTable("A")
             .columns(ImmutableList.of())
@@ -75,7 +75,7 @@ public class SelectTableTest {
     DataGeneratorTable tableC =
         DataGeneratorTable.builder()
             .name("C")
-            .qps(50)
+            .insertQps(50)
             .isRoot(true)
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())

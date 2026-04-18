@@ -20,6 +20,7 @@ import com.google.cloud.teleport.v2.spanner.migrations.connection.JdbcConnection
 import com.google.cloud.teleport.v2.spanner.migrations.exceptions.ConnectionException;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
+import com.google.cloud.teleport.v2.templates.utils.Constants;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -33,17 +34,26 @@ public class MySqlDataWriter implements DataWriter {
   private static final Logger LOG = LoggerFactory.getLogger(MySqlDataWriter.class);
   private final String sinkOptionsJson;
   private transient JdbcConnectionHelper connectionHelper;
+  private transient org.json.JSONArray parsedShards;
 
   public MySqlDataWriter(String sinkOptionsJson) {
     this.sinkOptionsJson = sinkOptionsJson;
   }
 
-  @Override
-  public void write(List<Row> rows, DataGeneratorTable table) {
-    write(rows, table, "");
+  private org.json.JSONArray getParsedShards() {
+    if (parsedShards == null) {
+      parsedShards = new org.json.JSONArray(sinkOptionsJson);
+    }
+    return parsedShards;
   }
 
-  public void write(List<Row> rows, DataGeneratorTable table, String shardId) {
+  @Override
+  public void write(List<Row> rows, DataGeneratorTable table) {
+    write(rows, table, "", Constants.MUTATION_INSERT);
+  }
+
+  @Override
+  public void write(List<Row> rows, DataGeneratorTable table, String shardId, String operation) {
     if (rows.isEmpty()) {
       return;
     }
@@ -57,7 +67,7 @@ public class MySqlDataWriter implements DataWriter {
         connectionHelper.init(request);
       }
 
-      org.json.JSONArray jsonArray = new org.json.JSONArray(sinkOptionsJson);
+      org.json.JSONArray jsonArray = getParsedShards();
       org.json.JSONObject targetShardJson = null;
 
       if (!shardId.isEmpty()) {
@@ -72,6 +82,10 @@ public class MySqlDataWriter implements DataWriter {
 
       if (targetShardJson == null) {
         // Fallback to first shard if not found or shardId is empty
+        if (!shardId.isEmpty()) {
+          LOG.warn(
+              "Shard ID '{}' not found in sink options. Falling back to first shard.", shardId);
+        }
         targetShardJson = jsonArray.getJSONObject(0);
       }
 
@@ -79,11 +93,15 @@ public class MySqlDataWriter implements DataWriter {
       String host = targetShardJson.optString("host", "");
       String port = targetShardJson.optString("port", "3306");
       String dbName = targetShardJson.optString("dbName", "");
+      String connectionProperties = targetShardJson.optString("connectionProperties", "");
       String jdbcUrl = String.format("jdbc:mysql://%s:%s/%s", host, port, dbName);
+      if (!connectionProperties.isEmpty()) {
+        jdbcUrl += "?" + connectionProperties;
+      }
       String connectionKey = jdbcUrl + "/" + user;
 
       try (Connection connection = connectionHelper.getConnection(connectionKey)) {
-        writeRowsToConnection(connection, rows, table);
+        writeRowsToConnection(connection, rows, table, operation);
       }
     } catch (ConnectionException | SQLException e) {
       LOG.error("Failed to write to MySQL", e);
@@ -92,14 +110,22 @@ public class MySqlDataWriter implements DataWriter {
   }
 
   private void writeRowsToConnection(
-      Connection connection, List<Row> rows, DataGeneratorTable table) throws SQLException {
+      Connection connection, List<Row> rows, DataGeneratorTable table, String operation)
+      throws SQLException {
     if (rows.isEmpty()) {
       return;
     }
-    String sql = buildInsertSql(table);
+    String sql;
+    if (Constants.MUTATION_UPDATE.equalsIgnoreCase(operation)) {
+      sql = buildUpdateSql(table);
+    } else if (Constants.MUTATION_DELETE.equalsIgnoreCase(operation)) {
+      sql = buildDeleteSql(table);
+    } else {
+      sql = buildInsertSql(table);
+    }
     try (PreparedStatement statement = connection.prepareStatement(sql)) {
       for (Row row : rows) {
-        setStatementParameters(statement, row, table);
+        setStatementParameters(statement, row, table, operation);
         statement.addBatch();
       }
       statement.executeBatch();
@@ -129,16 +155,89 @@ public class MySqlDataWriter implements DataWriter {
     return sql.toString();
   }
 
-  private void setStatementParameters(
-      PreparedStatement statement, Row row, DataGeneratorTable table) throws SQLException {
+  private String buildUpdateSql(DataGeneratorTable table) {
+    StringBuilder sql = new StringBuilder("UPDATE ");
+    sql.append(table.name()).append(" SET ");
+
     List<DataGeneratorColumn> columns = table.columns();
-    for (int i = 0; i < columns.size(); i++) {
-      DataGeneratorColumn col = columns.get(i);
-      Object val = null;
-      if (row.getSchema().hasField(col.name())) {
-        val = row.getValue(col.name());
+    boolean first = true;
+    for (DataGeneratorColumn col : columns) {
+      if (!col.isPrimaryKey()) {
+        if (!first) {
+          sql.append(", ");
+        }
+        sql.append(col.name()).append(" = ?");
+        first = false;
       }
-      statement.setObject(i + 1, val);
+    }
+    sql.append(" WHERE ");
+    first = true;
+    for (DataGeneratorColumn col : columns) {
+      if (col.isPrimaryKey()) {
+        if (!first) {
+          sql.append(" AND ");
+        }
+        sql.append(col.name()).append(" = ?");
+        first = false;
+      }
+    }
+    return sql.toString();
+  }
+
+  private String buildDeleteSql(DataGeneratorTable table) {
+    StringBuilder sql = new StringBuilder("DELETE FROM ");
+    sql.append(table.name()).append(" WHERE ");
+
+    List<DataGeneratorColumn> columns = table.columns();
+    boolean first = true;
+    for (DataGeneratorColumn col : columns) {
+      if (col.isPrimaryKey()) {
+        if (!first) {
+          sql.append(" AND ");
+        }
+        sql.append(col.name()).append(" = ?");
+        first = false;
+      }
+    }
+    return sql.toString();
+  }
+
+  private void setStatementParameters(
+      PreparedStatement statement, Row row, DataGeneratorTable table, String operation)
+      throws SQLException {
+    List<DataGeneratorColumn> columns = table.columns();
+    if (Constants.MUTATION_UPDATE.equalsIgnoreCase(operation)) {
+      int idx = 1;
+      // Set non-PK columns first
+      for (DataGeneratorColumn col : columns) {
+        if (!col.isPrimaryKey()) {
+          Object val = row.getSchema().hasField(col.name()) ? row.getValue(col.name()) : null;
+          statement.setObject(idx++, val);
+        }
+      }
+      // Set PK columns for WHERE clause
+      for (DataGeneratorColumn col : columns) {
+        if (col.isPrimaryKey()) {
+          Object val = row.getSchema().hasField(col.name()) ? row.getValue(col.name()) : null;
+          statement.setObject(idx++, val);
+        }
+      }
+    } else if (Constants.MUTATION_DELETE.equalsIgnoreCase(operation)) {
+      int idx = 1;
+      // Set PK columns for WHERE clause
+      for (DataGeneratorColumn col : columns) {
+        if (col.isPrimaryKey()) {
+          Object val = row.getSchema().hasField(col.name()) ? row.getValue(col.name()) : null;
+          statement.setObject(idx++, val);
+        }
+      }
+    } else {
+      // INSERT
+      for (int i = 0; i < columns.size(); i++) {
+        DataGeneratorColumn col = columns.get(i);
+        Object val = row.getSchema().hasField(col.name()) ? row.getValue(col.name()) : null;
+        statement.setObject(i + 1, val);
+      }
     }
   }
 

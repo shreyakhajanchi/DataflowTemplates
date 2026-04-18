@@ -18,6 +18,7 @@ package com.google.cloud.teleport.v2.templates.transforms;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
+import com.google.cloud.teleport.v2.templates.utils.Constants;
 import com.google.common.collect.ImmutableList;
 import org.apache.beam.sdk.testing.PAssert;
 import org.apache.beam.sdk.testing.TestPipeline;
@@ -71,7 +72,7 @@ public class GeneratePrimaryKeyTest {
         DataGeneratorTable.builder()
             .name("TestTable")
             .columns(ImmutableList.of(pkCol1, pkCol2, valCol))
-            .qps(10)
+            .insertQps(10)
             .isRoot(true)
             .primaryKeys(ImmutableList.of("id", "seq"))
             .foreignKeys(ImmutableList.of())
@@ -80,7 +81,7 @@ public class GeneratePrimaryKeyTest {
 
     PCollection<DataGeneratorTable> input = pipeline.apply(Create.of(table));
 
-    PCollection<KV<String, Row>> output = input.apply(new GeneratePrimaryKey(1));
+    PCollection<KV<String, Row>> output = input.apply(new GeneratePrimaryKey(1, null, null));
 
     PAssert.that(output)
         .satisfies(
@@ -108,18 +109,14 @@ public class GeneratePrimaryKeyTest {
               if (!row.getSchema().getField(1).getName().equals("seq")) {
                 throw new AssertionError("Second field should be seq");
               }
-              if (!row.getSchema()
-                  .getField(2)
-                  .getName()
-                  .equals(GeneratePrimaryKey.GeneratePrimaryKeyFn.SHARD_ID_COLUMN_NAME)) {
+              if (!row.getSchema().getField(2).getName().equals(Constants.SHARD_ID_COLUMN_NAME)) {
                 throw new AssertionError("Third field should be shard_id");
               }
 
               // Verify values
               String id = row.getString("id");
               Long seq = row.getInt64("seq");
-              String shardId =
-                  row.getString(GeneratePrimaryKey.GeneratePrimaryKeyFn.SHARD_ID_COLUMN_NAME);
+              String shardId = row.getString(Constants.SHARD_ID_COLUMN_NAME);
 
               if (id == null || id.isEmpty()) {
                 throw new AssertionError("ID should not be empty");

@@ -46,23 +46,28 @@ public abstract class DataGeneratorTable implements Serializable {
   /** Unique keys/indexes defined on this table. */
   public abstract ImmutableList<DataGeneratorUniqueKey> uniqueKeys();
 
-  // TODO: Add fields for QPS and parent-child record ratio here once data config
-  // is supported.
+  /** The target Insert QPS for this table. */
+  public abstract int insertQps();
 
-  /** The target QPS for this table. */
-  public abstract int qps();
+  /** The target Update QPS for this table. */
+  public abstract int updateQps();
+
+  /** The target Delete QPS for this table. */
+  public abstract int deleteQps();
 
   /** Whether this table is a root table. */
   public abstract boolean isRoot();
 
   /** The list of child tables. */
-  public abstract ImmutableList<String> children();
+  public abstract ImmutableList<String> childTables();
 
   public static Builder builder() {
     return new AutoValue_DataGeneratorTable.Builder()
-        .qps(1)
+        .insertQps(1)
+        .updateQps(0)
+        .deleteQps(0)
         .isRoot(true)
-        .children(ImmutableList.of());
+        .childTables(ImmutableList.of());
   }
 
   public abstract Builder toBuilder();
@@ -81,11 +86,15 @@ public abstract class DataGeneratorTable implements Serializable {
 
     public abstract Builder uniqueKeys(ImmutableList<DataGeneratorUniqueKey> uniqueKeys);
 
-    public abstract Builder qps(int qps);
+    public abstract Builder insertQps(int insertQps);
+
+    public abstract Builder updateQps(int updateQps);
+
+    public abstract Builder deleteQps(int deleteQps);
 
     public abstract Builder isRoot(boolean isRoot);
 
-    public abstract Builder children(ImmutableList<String> children);
+    public abstract Builder childTables(ImmutableList<String> childTables);
 
     public abstract DataGeneratorTable build();
   }

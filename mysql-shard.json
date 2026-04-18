@@ -1,0 +1,18 @@
+[
+  {
+    "user": "root",
+    "password": "pass123",
+    "host": "10.36.112.199",
+    "port": "3306",
+    "dbName": "dg_test",
+    "logicalShardId": "shard0"
+  },
+  {
+    "user": "root",
+    "password": "pass123",
+    "host": "10.36.112.199",
+    "port": "3306",
+    "dbName": "dg_test1",
+    "logicalShardId": "shard1"
+  }
+]
