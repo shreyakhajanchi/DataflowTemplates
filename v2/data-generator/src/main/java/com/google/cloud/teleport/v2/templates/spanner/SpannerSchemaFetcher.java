@@ -154,9 +154,22 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
     boolean isPrimaryKey =
         table.primaryKeys().stream().anyMatch(pk -> pk.name().equals(column.name()));
 
+    com.google.cloud.teleport.v2.templates.model.LogicalType logicalType =
+        typeMapper.getLogicalType(column.typeString(), dialect);
+    com.google.cloud.teleport.v2.templates.model.LogicalType elementType = null;
+    if (logicalType == com.google.cloud.teleport.v2.templates.model.LogicalType.ARRAY) {
+      String typeStr = column.typeString();
+      int start = typeStr.indexOf("<");
+      int end = typeStr.lastIndexOf(">");
+      if (start != -1 && end != -1 && end > start) {
+        String elementTypeStr = typeStr.substring(start + 1, end).trim();
+        elementType = typeMapper.getLogicalType(elementTypeStr, dialect);
+      }
+    }
+
     return DataGeneratorColumn.builder()
         .name(column.name())
-        .logicalType(typeMapper.getLogicalType(column.typeString(), dialect))
+        .logicalType(logicalType)
         .isNullable(!column.notNull())
         .isPrimaryKey(isPrimaryKey)
         .isGenerated(column.isGenerated())
@@ -164,6 +177,7 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
         .size(column.size() != null ? Long.valueOf(column.size()) : null)
         .precision(null)
         .scale(null)
+        .elementType(elementType)
         .build();
   }
 

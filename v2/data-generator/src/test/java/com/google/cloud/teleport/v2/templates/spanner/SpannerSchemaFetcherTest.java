@@ -203,4 +203,36 @@ public class SpannerSchemaFetcherTest {
     assertEquals(1, tableResult.uniqueKeys().get(0).keyColumns().size());
     assertEquals("uniqueCol", tableResult.uniqueKeys().get(0).keyColumns().get(0));
   }
+
+  @Test
+  public void testGetSchemaWithArray() throws IOException {
+
+    com.google.cloud.teleport.v2.spanner.ddl.Table table =
+        com.google.cloud.teleport.v2.spanner.ddl.Table.builder()
+            .name("t")
+            .column("array_col")
+            .parseType("ARRAY<INT64>")
+            .endColumn()
+            .primaryKeys(ImmutableList.of())
+            .build();
+
+    Ddl.Builder builder = Ddl.builder();
+    builder.addTable(table);
+    Ddl ddl = builder.build();
+    doReturn(ddl).when(fetcher).fetchDdl(any(SpannerConfig.class));
+
+    DataGeneratorSchema result = fetcher.getSchema();
+
+    assertEquals(1, result.tables().size());
+    com.google.cloud.teleport.v2.templates.model.DataGeneratorTable tableResult =
+        result.tables().get("t");
+    assertEquals(1, tableResult.columns().size());
+    assertEquals("array_col", tableResult.columns().get(0).name());
+    assertEquals(
+        com.google.cloud.teleport.v2.templates.model.LogicalType.ARRAY,
+        tableResult.columns().get(0).logicalType());
+    assertEquals(
+        com.google.cloud.teleport.v2.templates.model.LogicalType.INT64,
+        tableResult.columns().get(0).elementType());
+  }
 }

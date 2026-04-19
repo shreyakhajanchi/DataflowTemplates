@@ -275,6 +275,7 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       String pkValue = getPkValue(row, table);
       if (pkValue != null) {
         String stateKey = tableName + ":" + pkValue;
+        LOG.info("State key" + stateKey);
         org.apache.beam.sdk.state.ReadableState<Row> state = activeKeys.get(stateKey);
         if (state != null && state.read() != null) {
           LOG.info(
@@ -314,6 +315,12 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       // 0. Ensure Row has all columns (generate missing if needed)
       Row fullRow = completeRow(table, row);
 
+      String pkValue = getPkValue(fullRow, table);
+      if (pkValue != null) {
+        LOG.info("PK value" + pkValue);
+        activeKeys.put(tableName + ":" + pkValue, createReducedRow(fullRow, table));
+      }
+
       // 1. Buffer Row for current record
       String shardId = "";
       if (fullRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)) {
@@ -338,7 +345,6 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       }
 
       // Calculate Lifecycle Events based on QPS ratios
-      String pkValue = getPkValue(fullRow, table);
       long deleteTimestamp = 0;
       int numUpdates = 0;
       long now = System.currentTimeMillis();
@@ -402,8 +408,6 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       // 3. Schedule Lifecycle Events for THIS record LAST
       if (pkValue != null) {
         try {
-          activeKeys.put(tableName + ":" + pkValue, createReducedRow(fullRow, table));
-
           // Schedule updates
           for (int i = 1; i <= numUpdates; i++) {
             scheduleEvent(
