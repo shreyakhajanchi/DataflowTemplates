@@ -109,7 +109,7 @@ public class DataGenerator {
                         String tableName = c.element().getKey();
                         Row pkValues = c.element().getValue();
                         int hash = (tableName + pkValues.toString()).hashCode();
-                        int shard = Math.abs(hash % 50);
+                        int shard = Math.abs(hash % 5000);
                         c.output(KV.of(tableName + "#" + shard, pkValues));
                       }
                     }))

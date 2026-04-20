@@ -101,7 +101,7 @@ public class SpannerDataWriter implements DataWriter {
   }
 
   Mutation rowToInsertMutation(DataGeneratorTable table, Row row) {
-    return rowToMutation(table, row, Mutation.newInsertBuilder(table.name()));
+    return rowToMutation(table, row, Mutation.newInsertOrUpdateBuilder(table.name()));
   }
 
   Mutation rowToUpdateMutation(DataGeneratorTable table, Row row) {
