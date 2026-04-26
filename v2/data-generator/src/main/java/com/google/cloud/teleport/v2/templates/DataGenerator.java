@@ -20,18 +20,13 @@ import com.google.cloud.teleport.metadata.TemplateCategory;
 import com.google.cloud.teleport.v2.common.UncaughtExceptionLogger;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
-import com.google.cloud.teleport.v2.templates.transforms.BatchAndWrite;
-import com.google.cloud.teleport.v2.templates.transforms.GeneratePrimaryKey;
-import com.google.cloud.teleport.v2.templates.transforms.GenerateTicks;
 import com.google.cloud.teleport.v2.templates.transforms.SchemaLoader;
-import com.google.cloud.teleport.v2.templates.transforms.SelectTable;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.transforms.Reshuffle;
-import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.Row;
@@ -78,20 +73,58 @@ public class DataGenerator {
 
     // Generate ticks based on schema QPS
     int baseTickRate = options.getBaseTickRate() != null ? options.getBaseTickRate() : 1000;
-    PCollection<DataGeneratorTable> ticks =
-        pipeline
+    PCollection<org.joda.time.Instant> baseTicks =
+        pipeline.apply(
+            "PeriodicImpulse",
+            org.apache.beam.sdk.transforms.PeriodicImpulse.create()
+                .withInterval(org.joda.time.Duration.standardSeconds(1)));
+
+    PCollection<Long> ticks =
+        baseTicks
+            .apply("ReshuffleBaseTicks", Reshuffle.viaRandomKey())
             .apply(
-                "TriggerTick",
-                org.apache.beam.sdk.io.GenerateSequence.from(0)
-                    .withRate(baseTickRate, org.joda.time.Duration.standardSeconds(1)))
-            .apply("GenerateTicks", new GenerateTicks(options, schemaView))
+                "MultiplyTicks",
+                ParDo.of(
+                        new DoFn<org.joda.time.Instant, Long>() {
+                          @ProcessElement
+                          public void processElement(ProcessContext c) {
+                            System.out.println("MultiplyTicks started processing");
+                            DataGeneratorSchema schema = c.sideInput(schemaView);
+                            int totalQps = 0;
+                            for (DataGeneratorTable table : schema.tables().values()) {
+                              if (table.isRoot()) {
+                                totalQps += table.insertQps();
+                              }
+                            }
+                            System.out.println("MultiplyTicks calculated totalQps: " + totalQps);
+
+                            for (int i = 0; i < totalQps; i++) {
+                              c.output(c.element().getMillis());
+                            }
+                          }
+                        })
+                    .withSideInputs(schemaView))
+            .apply("ReshuffleTicks", Reshuffle.viaRandomKey());
+
+    ticks.apply(
+        "DummySink",
+        ParDo.of(
+            new DoFn<Long, Void>() {
+              @ProcessElement
+              public void processElement(ProcessContext c) {
+                // do nothing to test scaling
+              }
+            }));
+
+    /*
+    PCollection<DataGeneratorTable> selectedTicks = ticks
             .apply("ReshuffleProvider", Reshuffle.viaRandomKey())
             .apply("SelectTable", new SelectTable(schemaView));
 
     // Generate Primary Keys
     int maxShards = options.getMaxShards() != null ? options.getMaxShards() : 1;
     PCollection<KV<String, Row>> pendingRows =
-        ticks.apply(
+        selectedTicks.apply(
             "GeneratePrimaryKey",
             new GeneratePrimaryKey(
                 maxShards, options.getSinkOptions(), options.getSinkType().name()));
@@ -122,6 +155,7 @@ public class DataGenerator {
             options.getSinkOptions(),
             options.getBatchSize(),
             schemaView));
+    */
 
     return pipeline.run();
   }
