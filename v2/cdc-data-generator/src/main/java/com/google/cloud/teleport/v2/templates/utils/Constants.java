@@ -1,0 +1,52 @@
+/*
+ * Copyright (C) 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
+ */
+package com.google.cloud.teleport.v2.templates.utils;
+
+/** Constants used across the Data Generator template. */
+public class Constants {
+
+  public static final String SHARD_ID_COLUMN_NAME = "_dg_shard_id";
+
+  // Mutation Types
+  public static final String MUTATION_INSERT = "INSERT";
+  public static final String MUTATION_UPDATE = "UPDATE";
+  public static final String MUTATION_DELETE = "DELETE";
+
+  // Sink Types
+  public static final String SINK_TYPE_MYSQL = "MYSQL";
+  public static final String SINK_TYPE_SPANNER = "SPANNER";
+
+  // Default HikariCP pool size per shard when writing to JDBC sinks.
+  public static final int DEFAULT_JDBC_POOL_SIZE = 10;
+
+  // MySQL JDBC driver class name, used when constructing ConnectionHelperRequest.
+  public static final String MYSQL_JDBC_DRIVER = "com.mysql.cj.jdbc.Driver";
+
+  // JDBC URL prefix for MySQL connections.
+  public static final String JDBC_MYSQL_URL_PREFIX = "jdbc:mysql://";
+
+  // Character used to quote identifiers in MySQL (back-tick).
+  public static final String MYSQL_IDENTIFIER_QUOTE = "`";
+
+  // Keys for Spanner sink configuration JSON.
+  public static final String SPANNER_CONFIG_PROJECT_ID_KEY = "projectId";
+  public static final String SPANNER_CONFIG_INSTANCE_ID_KEY = "instanceId";
+  public static final String SPANNER_CONFIG_DATABASE_ID_KEY = "databaseId";
+
+  private Constants() {
+    // Prevent instantiation
+  }
+}

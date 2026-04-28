@@ -689,7 +689,7 @@
         <module>real-spanner-service</module>
         <module>failure-injected-spanner-service</module>
         <module>failure-injection-policies</module>
-        <module>data-generator</module>
+        <module>cdc-data-generator</module>
         <!-- <module>simulator</module> -->
     </modules>
 
