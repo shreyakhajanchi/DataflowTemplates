@@ -147,7 +147,8 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
     // if (table.uniqueKeys() != null) {
     //   for (SourceUniqueKey uk : table.uniqueKeys()) {
     //     uniqueKeysBuilder.add(
-    //         DataGeneratorUniqueKey.builder().name(uk.name()).keyColumns(uk.keyColumns()).build());
+    //
+    // DataGeneratorUniqueKey.builder().name(uk.name()).keyColumns(uk.keyColumns()).build());
     //   }
     // }
 

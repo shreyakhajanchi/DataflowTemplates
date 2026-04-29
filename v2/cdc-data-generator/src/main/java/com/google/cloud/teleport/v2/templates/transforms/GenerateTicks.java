@@ -25,8 +25,8 @@ import org.apache.beam.sdk.values.PCollectionView;
 import org.joda.time.Instant;
 
 /**
- * A {@link PTransform} that takes a trigger tick and outputs multiple ticks
- * based on the total QPS required by the root tables in the schema side input.
+ * A {@link PTransform} that takes a trigger tick and outputs multiple ticks based on the total QPS
+ * required by the root tables in the schema side input.
  */
 public class GenerateTicks extends PTransform<PCollection<Instant>, PCollection<Long>> {
 
@@ -39,8 +39,7 @@ public class GenerateTicks extends PTransform<PCollection<Instant>, PCollection<
   @Override
   public PCollection<Long> expand(PCollection<Instant> input) {
     return input.apply(
-        "ScaleTicks",
-        ParDo.of(new ScaleTicksFn(schemaView)).withSideInputs(schemaView));
+        "ScaleTicks", ParDo.of(new ScaleTicksFn(schemaView)).withSideInputs(schemaView));
   }
 
   static class ScaleTicksFn extends DoFn<Instant, Long> {

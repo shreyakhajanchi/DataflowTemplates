@@ -141,7 +141,9 @@ public class MySqlInformationSchemaScanner implements SourceSchemaScanner {
 
         String columnType = rs.getString("column_type");
         String dataType = rs.getString("data_type");
-        if ("tinyint".equalsIgnoreCase(dataType) && columnType != null && columnType.contains("(1)")) {
+        if ("tinyint".equalsIgnoreCase(dataType)
+            && columnType != null
+            && columnType.contains("(1)")) {
           columnBuilder.size(1L);
         }
 

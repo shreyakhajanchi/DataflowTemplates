@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 Google Inc.
+ * Copyright (C) 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -38,31 +38,19 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Generates a synthetic primary-key Row for each incoming
- * {@link DataGeneratorTable}.
+ * Generates a synthetic primary-key Row for each incoming {@link DataGeneratorTable}.
  *
- * <p>
- * The emitted {@link Row} has the table's PK columns followed by a synthesised
- * logical shard id
- * column (name controlled by {@link Constants#SHARD_ID_COLUMN_NAME}). The shard
- * id is either
- * sampled uniformly from {@code [0, maxShards)} or, for MySQL sinks with a
- * shard config file,
- * sampled uniformly from the configured logical shard ids so the same shard ids
- * used by downstream
+ * <p>The emitted {@link Row} has the table's PK columns followed by a synthesised logical shard id
+ * column (name controlled by {@link Constants#SHARD_ID_COLUMN_NAME}). The shard id is either
+ * sampled uniformly from {@code [0, maxShards)} or, for MySQL sinks with a shard config file,
+ * sampled uniformly from the configured logical shard ids so the same shard ids used by downstream
  * writers are reused here.
  *
- * <p>
- * Randomness: {@link Faker} is constructed with its default no-arg constructor
- * (which seeds
- * itself from {@code System.nanoTime()} plus a per-instance counter and
- * shard-id selection uses
- * {@link ThreadLocalRandom#current()} to avoid
- * contention under high fan-out.
+ * <p>Randomness: {@link Faker} is constructed with its default no-arg constructor (which seeds
+ * itself from {@code System.nanoTime()} plus a per-instance counter and shard-id selection uses
+ * {@link ThreadLocalRandom#current()} to avoid contention under high fan-out.
  *
- * <p>
- * Output: {@code KV<tableName, pkRow>} so downstream transforms can shuffle by
- * table while
+ * <p>Output: {@code KV<tableName, pkRow>} so downstream transforms can shuffle by table while
  * keeping the row schema per-table.
  */
 public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Row>> {
@@ -76,10 +64,7 @@ public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Ro
   private transient Faker faker;
   private transient List<String> logicalShardIds;
 
-  /**
-   * Per-table PK schema cache. Schemas are static per pipeline run so this is
-   * write-once.
-   */
+  /** Per-table PK schema cache. Schemas are static per pipeline run so this is write-once. */
   private transient Map<String, Schema> schemaCache;
 
   public GeneratePrimaryKeyFn(int maxShards, String sinkOptionsPath, String sinkType) {
@@ -99,9 +84,10 @@ public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Ro
       try {
         ShardFileReader shardFileReader = new ShardFileReader(new SecretManagerAccessorImpl());
         List<Shard> shards = shardFileReader.getOrderedShardDetails(sinkOptionsPath);
-        this.logicalShardIds = shards == null || shards.isEmpty()
-            ? null
-            : shards.stream().map(Shard::getLogicalShardId).collect(Collectors.toList());
+        this.logicalShardIds =
+            shards == null || shards.isEmpty()
+                ? null
+                : shards.stream().map(Shard::getLogicalShardId).collect(Collectors.toList());
       } catch (Exception e) {
         throw new RuntimeException("Failed to read shards from " + sinkOptionsPath, e);
       }
@@ -172,10 +158,8 @@ public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Ro
   }
 
   /**
-   * Select a shard id for this row. Prefer a configured logical shard id,
-   * otherwise synthesise a placeholder {@code shard<N>}. Bounded at maxShards >=
-   * 1 so {@code
-   * nextInt} never throws.
+   * Select a shard id for this row. Prefer a configured logical shard id, otherwise synthesise a
+   * placeholder {@code shard<N>}. Bounded at maxShards >= 1 so {@code nextInt} never throws.
    */
   private String pickShardId() {
     ThreadLocalRandom rng = ThreadLocalRandom.current();

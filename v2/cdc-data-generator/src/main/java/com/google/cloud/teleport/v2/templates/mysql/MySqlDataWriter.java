@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2026 Google Inc.
+ * Copyright (C) 2026 Google LLC
  *
  * Licensed under the Apache License, Version 2.0 (the "License"); you may not
  * use this file except in compliance with the License. You may obtain a copy of
@@ -199,11 +199,7 @@ public class MySqlDataWriter implements DataWriter {
           // Fallback to 5-arg constructor
           java.lang.reflect.Constructor<ConnectionHelperRequest> constr5 =
               ConnectionHelperRequest.class.getConstructor(
-                  java.util.List.class,
-                  String.class,
-                  int.class,
-                  String.class,
-                  String.class);
+                  java.util.List.class, String.class, int.class, String.class, String.class);
           request =
               constr5.newInstance(
                   ImmutableList.copyOf(shardsByLogicalId.values()),
@@ -464,6 +460,5 @@ public class MySqlDataWriter implements DataWriter {
   }
 
   @Override
-  public void close() {
-  }
+  public void close() {}
 }

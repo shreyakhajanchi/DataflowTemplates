@@ -94,12 +94,14 @@ public class GenerateTicksTest implements Serializable {
 
     org.apache.beam.sdk.values.PCollection<Long> scaledTicks =
         pipeline
-            .apply("Trigger", Create.of(
-                Instant.ofEpochMilli(100),
-                Instant.ofEpochMilli(200),
-                Instant.ofEpochMilli(300),
-                Instant.ofEpochMilli(400),
-                Instant.ofEpochMilli(500))) // 5 incoming ticks
+            .apply(
+                "Trigger",
+                Create.of(
+                    Instant.ofEpochMilli(100),
+                    Instant.ofEpochMilli(200),
+                    Instant.ofEpochMilli(300),
+                    Instant.ofEpochMilli(400),
+                    Instant.ofEpochMilli(500))) // 5 incoming ticks
             .apply("GenerateTicks", new GenerateTicks(schemaView));
 
     // Because total QPS is 20, each incoming tick generates 20 output ticks.

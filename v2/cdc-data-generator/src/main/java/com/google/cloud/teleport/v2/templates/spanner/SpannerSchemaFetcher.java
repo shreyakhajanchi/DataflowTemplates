@@ -109,7 +109,8 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
     if (table.indexes() != null) {
       for (Object indexObj : table.indexes()) {
         if (indexObj instanceof com.google.cloud.teleport.v2.spanner.ddl.Index) {
-          com.google.cloud.teleport.v2.spanner.ddl.Index index = (com.google.cloud.teleport.v2.spanner.ddl.Index) indexObj;
+          com.google.cloud.teleport.v2.spanner.ddl.Index index =
+              (com.google.cloud.teleport.v2.spanner.ddl.Index) indexObj;
           // Ignore PRIMARY_KEY and only include unique indices
           if (index != null && index.unique() && !"PRIMARY_KEY".equalsIgnoreCase(index.name())) {
             uniqueKeysBuilder.add(
@@ -120,8 +121,8 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
                             .filter(
                                 c ->
                                     c.order()
-                                        != com.google.cloud.teleport.v2.spanner.ddl.IndexColumn.Order
-                                            .STORING)
+                                        != com.google.cloud.teleport.v2.spanner.ddl.IndexColumn
+                                            .Order.STORING)
                             .map(com.google.cloud.teleport.v2.spanner.ddl.IndexColumn::name)
                             .collect(ImmutableList.toImmutableList()))
                     .build());
