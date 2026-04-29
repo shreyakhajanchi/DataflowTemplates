@@ -334,4 +334,83 @@ public class SchemaUtilsTest {
     assertEquals(0, dagSchema.tables().get("C2").childTables().size());
     assertEquals(0, dagSchema.tables().get("GC1").childTables().size());
   }
+
+  @Test
+  public void testDAGConstructionDependentParents() {
+    // Departments (200 QPS) <- EmployeeAssignments (100 QPS)
+    // Projects (50 QPS) -> both
+    // Physical FK: EmployeeAssignments -> Departments
+    // Old logic would chain: EmployeeAssignments -> Departments (because 100 < 200)
+    // New logic should chain: Departments -> EmployeeAssignments (because of FK)
+    
+    DataGeneratorTable departments = DataGeneratorTable.builder()
+        .name("Departments")
+        .insertQps(200)
+        .columns(ImmutableList.of())
+        .primaryKeys(ImmutableList.of())
+        .foreignKeys(ImmutableList.of())
+        .uniqueKeys(ImmutableList.of())
+        .build();
+
+    DataGeneratorTable employees = DataGeneratorTable.builder()
+        .name("EmployeeAssignments")
+        .insertQps(100)
+        .columns(ImmutableList.of())
+        .primaryKeys(ImmutableList.of())
+        .foreignKeys(ImmutableList.of(
+            DataGeneratorForeignKey.builder()
+                .name("fk_emp_dept")
+                .keyColumns(ImmutableList.of("DeptCode"))
+                .referencedTable("Departments")
+                .referencedColumns(ImmutableList.of("DeptCode"))
+                .build()
+        ))
+        .uniqueKeys(ImmutableList.of())
+        .build();
+
+    DataGeneratorTable projects = DataGeneratorTable.builder()
+        .name("Projects")
+        .insertQps(50)
+        .columns(ImmutableList.of())
+        .primaryKeys(ImmutableList.of())
+        .foreignKeys(ImmutableList.of(
+            DataGeneratorForeignKey.builder()
+                .name("fk_proj_dept")
+                .keyColumns(ImmutableList.of("DeptCode"))
+                .referencedTable("Departments")
+                .referencedColumns(ImmutableList.of("DeptCode"))
+                .build(),
+            DataGeneratorForeignKey.builder()
+                .name("fk_proj_emp")
+                .keyColumns(ImmutableList.of("EmpId"))
+                .referencedTable("EmployeeAssignments")
+                .referencedColumns(ImmutableList.of("EmpId"))
+                .build()
+        ))
+        .uniqueKeys(ImmutableList.of())
+        .build();
+
+    DataGeneratorSchema schema = DataGeneratorSchema.builder()
+        .dialect(SinkDialect.MYSQL)
+        .tables(ImmutableMap.of("Departments", departments, "EmployeeAssignments", employees, "Projects", projects))
+        .build();
+
+    DataGeneratorSchema dagSchema = SchemaUtils.setSchemaDAG(schema);
+
+    DataGeneratorTable newDept = dagSchema.tables().get("Departments");
+    DataGeneratorTable newEmp = dagSchema.tables().get("EmployeeAssignments");
+    DataGeneratorTable newProj = dagSchema.tables().get("Projects");
+
+    assertTrue(newDept.isRoot()); // Departments should be root!
+    assertFalse(newEmp.isRoot());
+    assertFalse(newProj.isRoot());
+
+    // Departments should have EmployeeAssignments as child
+    assertEquals(1, newDept.childTables().size());
+    assertEquals("EmployeeAssignments", newDept.childTables().get(0));
+
+    // EmployeeAssignments should have Projects as child
+    assertEquals(1, newEmp.childTables().size());
+    assertEquals("Projects", newEmp.childTables().get(0));
+  }
 }

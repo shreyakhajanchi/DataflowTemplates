@@ -255,21 +255,6 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       }
     }
 
-    private String readSinkOptions(String path) {
-      try (java.nio.channels.ReadableByteChannel channel =
-          org.apache.beam.sdk.io.FileSystems.open(
-              org.apache.beam.sdk.io.FileSystems.matchNewResource(path, false))) {
-        try (java.io.Reader reader =
-            new java.io.InputStreamReader(
-                java.nio.channels.Channels.newInputStream(channel),
-                java.nio.charset.StandardCharsets.UTF_8)) {
-          return com.google.common.io.CharStreams.toString(reader);
-        }
-      } catch (java.io.IOException e) {
-        throw new RuntimeException("Failed to read sink options from " + path, e);
-      }
-    }
-
     @StartBundle
     public void startBundle() {
       this.buffers = new HashMap<>();
@@ -509,6 +494,7 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
                 parentTable, parentRow, childTable, ancestorRows, activeKeys, stickyShardId);
         if (childRow == null) {
           // FK could not be resolved; skip this child emission to maintain integrity.
+          LOG.warn("Skipping child row for table {} because foreign key could not be resolved.", childTable.name());
           unresolvableFkChildrenDropped.inc();
           continue;
         }
@@ -644,6 +630,9 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       List<Object> values = new ArrayList<>();
 
       for (DataGeneratorColumn col : childTable.columns()) {
+        if (col.skip()) {
+          continue;
+        }
         Object val = columnValues.get(col.name());
         if (val == null) {
           if (uniqueCols.contains(col.name())) {
@@ -1176,6 +1165,11 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
         if (!shardId.isEmpty()) {
           Metrics.counter(BatchAndWriteFn.class, "recordsWritten_" + shardId).inc(batch.size());
         }
+        String counterName = operation.toLowerCase() + "_" + tableName;
+        if (Constants.SINK_TYPE_MYSQL.equalsIgnoreCase(sinkType) && !shardId.isEmpty()) {
+          counterName += "_" + shardId;
+        }
+        Metrics.counter(BatchAndWriteFn.class, counterName).inc(batch.size());
         batch.clear();
       }
       // Drop empty buffer entry to avoid linearly scanning it on subsequent flushes.
@@ -1221,6 +1215,9 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       Schema.Builder schemaBuilder = Schema.builder();
 
       for (DataGeneratorColumn col : table.columns()) {
+        if (col.skip()) {
+          continue;
+        }
         Object val = currentValues.get(col.name());
         if (val == null) {
           if (uniqueCols.contains(col.name())) {

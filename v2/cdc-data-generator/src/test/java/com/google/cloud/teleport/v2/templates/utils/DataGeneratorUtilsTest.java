@@ -125,4 +125,56 @@ public class DataGeneratorUtilsTest {
     Assert.assertFalse(list.isEmpty());
     Assert.assertTrue(list.get(0) instanceof String);
   }
+
+  @Test
+  public void testGenerateFromExpression_FakerExpression() {
+    DataGeneratorColumn column =
+        DataGeneratorColumn.builder()
+            .name("name_col")
+            .logicalType(LogicalType.STRING)
+            .isNullable(false)
+            .isPrimaryKey(false)
+            .isGenerated(false)
+            .originalType("VARCHAR")
+            .generator("#{name.fullName}")
+            .build();
+
+    Object value = DataGeneratorUtils.generateFromExpression(column, faker);
+    Assert.assertTrue(value instanceof String);
+    Assert.assertFalse(((String) value).isEmpty());
+  }
+
+  @Test
+  public void testGenerateFromExpression_LiteralString() {
+    DataGeneratorColumn column =
+        DataGeneratorColumn.builder()
+            .name("const_col")
+            .logicalType(LogicalType.STRING)
+            .isNullable(false)
+            .isPrimaryKey(false)
+            .isGenerated(false)
+            .originalType("VARCHAR")
+            .generator("fixed_value")
+            .build();
+
+    Object value = DataGeneratorUtils.generateFromExpression(column, faker);
+    Assert.assertEquals("fixed_value", value);
+  }
+
+  @Test
+  public void testGenerateFromExpression_LiteralInteger() {
+    DataGeneratorColumn column =
+        DataGeneratorColumn.builder()
+            .name("const_int_col")
+            .logicalType(LogicalType.INT64)
+            .isNullable(false)
+            .isPrimaryKey(false)
+            .isGenerated(false)
+            .originalType("BIGINT")
+            .generator("12345")
+            .build();
+
+    Object value = DataGeneratorUtils.generateFromExpression(column, faker);
+    Assert.assertEquals(12345L, value);
+  }
 }

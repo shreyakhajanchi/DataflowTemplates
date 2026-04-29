@@ -26,9 +26,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /** Utilities for manipulating {@link DataGeneratorSchema}. */
 public class SchemaUtils {
+  private static final Logger LOG = LoggerFactory.getLogger(SchemaUtils.class);
 
   /**
    * Constructs a Directed Acyclic Graph (DAG) of tables in the schema. Identifies parent-child
@@ -70,13 +73,13 @@ public class SchemaUtils {
         continue; // No parents for this table
       }
 
-      // Sort Parents by QPS
-      parents.sort(java.util.Comparator.comparingInt(DataGeneratorTable::insertQps));
+      // Sort Parents Topologically to respect physical FK relations
+      List<DataGeneratorTable> sortedParents = sortTopologically(parents, tableMap);
 
       // Chain the Parents: P1 -> P2 -> ... -> Pn -> Child
-      for (int i = 0; i < parents.size() - 1; i++) {
-        String currentParentName = parents.get(i).name();
-        String nextParentName = parents.get(i + 1).name();
+      for (int i = 0; i < sortedParents.size() - 1; i++) {
+        String currentParentName = sortedParents.get(i).name();
+        String nextParentName = sortedParents.get(i + 1).name();
         // Avoid adding duplicate dependencies if a table is part of multiple chains
         List<String> currentChildren =
             parentToSequenceChild.computeIfAbsent(currentParentName, k -> new ArrayList<>());
@@ -87,7 +90,7 @@ public class SchemaUtils {
       }
 
       // Link the last parent in the chain to the child table
-      String lastParentName = parents.get(parents.size() - 1).name();
+      String lastParentName = sortedParents.get(sortedParents.size() - 1).name();
       List<String> lastParentChildren =
           parentToSequenceChild.computeIfAbsent(lastParentName, k -> new ArrayList<>());
       if (!lastParentChildren.contains(childName)) {
@@ -143,11 +146,57 @@ public class SchemaUtils {
               .isRoot(isRoot)
               .depth(depth)
               .build());
+
+      if (isRoot) {
+        LOG.info("Identified Root table: {}", tableName);
+      }
+      if (!sequenceChildren.isEmpty()) {
+        LOG.info("Table {} triggers children: {}", tableName, sequenceChildren);
+      }
     }
 
     return DataGeneratorSchema.builder()
         .dialect(schema.dialect())
         .tables(newTablesBuilder.buildOrThrow())
         .build();
+  }
+
+
+
+  private static List<DataGeneratorTable> sortTopologically(List<DataGeneratorTable> tables, Map<String, DataGeneratorTable> allTables) {
+    List<DataGeneratorTable> sortedInput = new ArrayList<>(tables);
+    // Fallback to QPS sort for independent nodes to maintain test stability
+    sortedInput.sort(java.util.Comparator.comparingInt(DataGeneratorTable::insertQps));
+
+    List<DataGeneratorTable> sorted = new ArrayList<>();
+    Set<String> visited = new HashSet<>();
+    Set<String> visiting = new HashSet<>();
+
+    for (DataGeneratorTable table : sortedInput) {
+      if (!visited.contains(table.name())) {
+        dfs(table, allTables, visited, visiting, sorted, sortedInput);
+      }
+    }
+    return sorted;
+  }
+
+  private static void dfs(DataGeneratorTable table, Map<String, DataGeneratorTable> allTables, Set<String> visited, Set<String> visiting, List<DataGeneratorTable> sorted, List<DataGeneratorTable> subset) {
+    visiting.add(table.name());
+    for (DataGeneratorForeignKey fk : table.foreignKeys()) {
+      String refTable = fk.referencedTable();
+      // Only consider dependencies among the subset of tables we are sorting!
+      if (subset.stream().anyMatch(t -> t.name().equals(refTable))) {
+        DataGeneratorTable parent = allTables.get(refTable);
+        if (parent != null && !visited.contains(refTable)) {
+          if (visiting.contains(refTable)) {
+            throw new IllegalStateException("Circular dependency detected among parents involving " + refTable);
+          }
+          dfs(parent, allTables, visited, visiting, sorted, subset);
+        }
+      }
+    }
+    visiting.remove(table.name());
+    visited.add(table.name());
+    sorted.add(table);
   }
 }

@@ -15,18 +15,29 @@
  */
 package com.google.cloud.teleport.v2.templates;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.cloud.teleport.metadata.Template;
 import com.google.cloud.teleport.metadata.TemplateCategory;
 import com.google.cloud.teleport.v2.common.UncaughtExceptionLogger;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
+import com.google.cloud.teleport.v2.templates.model.SchemaConfig;
 import com.google.cloud.teleport.v2.templates.transforms.BatchAndWrite;
 import com.google.cloud.teleport.v2.templates.transforms.GeneratePrimaryKey;
 import com.google.cloud.teleport.v2.templates.transforms.GenerateTicks;
 import com.google.cloud.teleport.v2.templates.transforms.SchemaLoader;
 import com.google.cloud.teleport.v2.templates.transforms.SelectTable;
+import com.google.common.io.CharStreams;
+import com.jasonclawson.jackson.dataformat.hocon.HoconFactory;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.charset.StandardCharsets;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
+import org.apache.beam.sdk.io.FileSystems;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
@@ -67,6 +78,22 @@ public class DataGenerator {
         .registerCoderForClass(
             Row.class, org.apache.beam.sdk.coders.SerializableCoder.of(Row.class));
 
+    SchemaConfig schemaConfig = null;
+    if (options.getSchemaConfig() != null && !options.getSchemaConfig().isEmpty()) {
+      try (ReadableByteChannel channel =
+          FileSystems.open(FileSystems.matchNewResource(options.getSchemaConfig(), false))) {
+        try (Reader reader =
+            new InputStreamReader(Channels.newInputStream(channel), StandardCharsets.UTF_8)) {
+          String content = CharStreams.toString(reader);
+          ObjectMapper mapper = new ObjectMapper(new HoconFactory());
+          schemaConfig = mapper.readValue(content, SchemaConfig.class);
+        }
+      } catch (IOException e) {
+        throw new RuntimeException(
+            "Failed to read schema config from " + options.getSchemaConfig(), e);
+      }
+    }
+
     PCollectionView<DataGeneratorSchema> schemaView =
         pipeline.apply(
             "LoadSchema",
@@ -74,7 +101,9 @@ public class DataGenerator {
                 options.getSinkType(),
                 options.getSinkOptions(),
                 options.getInsertQps(),
-                options.getSchemaConfig()));
+                options.getUpdateQps(),
+                options.getDeleteQps(),
+                schemaConfig));
 
     // Generate ticks based on schema QPS
     PCollection<DataGeneratorTable> ticks =

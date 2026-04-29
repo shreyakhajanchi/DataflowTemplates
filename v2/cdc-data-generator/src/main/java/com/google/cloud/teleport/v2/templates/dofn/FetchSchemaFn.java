@@ -1,0 +1,62 @@
+/*
+ * Copyright (C) 2026 Google LLC
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy of
+ * the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations under
+ * the License.
+ */
+package com.google.cloud.teleport.v2.templates.dofn;
+
+import com.google.cloud.teleport.v2.templates.DataGeneratorOptions.SinkType;
+import com.google.cloud.teleport.v2.templates.common.SinkSchemaFetcher;
+import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
+import com.google.cloud.teleport.v2.templates.transforms.SchemaLoader;
+import java.io.IOException;
+import org.apache.beam.sdk.transforms.DoFn;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+/** DoFn to fetch the schema from the sink. */
+public class FetchSchemaFn extends DoFn<SinkType, DataGeneratorSchema> {
+  private static final Logger LOG = LoggerFactory.getLogger(FetchSchemaFn.class);
+
+  private final SinkType sinkType;
+  private final String sinkOptionsPath;
+
+  public FetchSchemaFn(SinkType sinkType, String sinkOptionsPath) {
+    this.sinkType = sinkType;
+    this.sinkOptionsPath = sinkOptionsPath;
+  }
+
+  @ProcessElement
+  public void processElement(OutputReceiver<DataGeneratorSchema> receiver) {
+    try {
+      String sinkOptionsJson = readSinkOptions(sinkOptionsPath);
+      SinkSchemaFetcher fetcher = createFetcher(sinkType);
+
+      fetcher.init(sinkOptionsPath, sinkOptionsJson);
+      DataGeneratorSchema schema = fetcher.getSchema();
+      LOG.info("Fetched Schema from DB: {}", schema);
+
+      receiver.output(schema);
+    } catch (IOException e) {
+      throw new RuntimeException("Failed to fetch schema from DB", e);
+    }
+  }
+
+  protected SinkSchemaFetcher createFetcher(SinkType sinkType) {
+    return SchemaLoader.createFetcher(sinkType);
+  }
+
+  protected String readSinkOptions(String path) throws IOException {
+    return SchemaLoader.readSinkOptions(path);
+  }
+}

@@ -100,8 +100,6 @@ public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions,
 
   void setDeleteQps(Integer value);
 
-
-
   @TemplateParameter.Integer(
       order = 9,
       optional = true,

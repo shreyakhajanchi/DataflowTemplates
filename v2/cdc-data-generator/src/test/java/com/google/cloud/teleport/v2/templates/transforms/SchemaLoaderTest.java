@@ -16,7 +16,6 @@
 package com.google.cloud.teleport.v2.templates.transforms;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -24,10 +23,9 @@ import static org.mockito.Mockito.when;
 
 import com.google.cloud.teleport.v2.templates.DataGeneratorOptions.SinkType;
 import com.google.cloud.teleport.v2.templates.common.SinkSchemaFetcher;
+import com.google.cloud.teleport.v2.templates.dofn.FetchSchemaFn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
-import com.google.cloud.teleport.v2.templates.model.LogicalType;
 import com.google.cloud.teleport.v2.templates.model.SinkDialect;
-import com.google.cloud.teleport.v2.templates.transforms.SchemaLoader.FetchSchemaFn;
 import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
 import org.apache.beam.sdk.testing.TestPipeline;
@@ -56,7 +54,7 @@ public class SchemaLoaderTest {
     when(mockFetcher.getSchema()).thenReturn(schema);
 
     FetchSchemaFn fn =
-        new FetchSchemaFn(SinkType.SPANNER, "options", 100, null) {
+        new FetchSchemaFn(SinkType.SPANNER, "options") {
           @Override
           protected SinkSchemaFetcher createFetcher(SinkType sinkType) {
             assertEquals(SinkType.SPANNER, sinkType);
@@ -73,7 +71,7 @@ public class SchemaLoaderTest {
     fn.processElement(receiver);
 
     verify(mockFetcher).init("options", "{}");
-    verify(mockFetcher).setQps(100);
+
     verify(receiver).output(schema);
   }
 
@@ -85,7 +83,7 @@ public class SchemaLoaderTest {
     when(mockFetcher.getSchema()).thenReturn(schema);
 
     FetchSchemaFn fn =
-        new FetchSchemaFn(SinkType.MYSQL, "options", null, null) {
+        new FetchSchemaFn(SinkType.MYSQL, "options") {
           @Override
           protected SinkSchemaFetcher createFetcher(SinkType sinkType) {
             assertEquals(SinkType.MYSQL, sinkType);
@@ -106,69 +104,8 @@ public class SchemaLoaderTest {
   }
 
   @Test
-  public void testFetchSchemaFn_WithOverrides() throws IOException {
-    final SinkSchemaFetcher mockFetcher = mock(SinkSchemaFetcher.class);
-    final com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn col =
-        com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn.builder()
-            .name("id")
-            .logicalType(LogicalType.INT64)
-            .isNullable(false)
-            .isPrimaryKey(true)
-            .isGenerated(false)
-            .originalType("INT64")
-            .build();
-    final com.google.cloud.teleport.v2.templates.model.DataGeneratorTable table =
-        com.google.cloud.teleport.v2.templates.model.DataGeneratorTable.builder()
-            .name("my_table")
-            .columns(com.google.common.collect.ImmutableList.of(col))
-            .primaryKeys(com.google.common.collect.ImmutableList.of("id"))
-            .foreignKeys(com.google.common.collect.ImmutableList.of())
-            .uniqueKeys(com.google.common.collect.ImmutableList.of())
-            .insertQps(100)
-            .isRoot(true)
-            .build();
-    final DataGeneratorSchema schema =
-        DataGeneratorSchema.builder()
-            .tables(com.google.common.collect.ImmutableMap.of("my_table", table))
-            .dialect(SinkDialect.MYSQL)
-            .build();
-    when(mockFetcher.getSchema()).thenReturn(schema);
-
-    FetchSchemaFn fn =
-        new FetchSchemaFn(SinkType.MYSQL, "options", null, "schema_config.json") {
-          @Override
-          protected SinkSchemaFetcher createFetcher(SinkType sinkType) {
-            return mockFetcher;
-          }
-
-          @Override
-          protected String readSinkOptions(String path) throws IOException {
-            if ("schema_config.json".equals(path)) {
-              return "{\"tables\": [{\"tableName\": \"my_table\", \"insertQps\": 500}]}";
-            }
-            return "{}";
-          }
-        };
-
-    DoFn.OutputReceiver<DataGeneratorSchema> receiver = mock(DoFn.OutputReceiver.class);
-    org.mockito.ArgumentCaptor<DataGeneratorSchema> captor =
-        org.mockito.ArgumentCaptor.forClass(DataGeneratorSchema.class);
-
-    fn.processElement(receiver);
-
-    verify(receiver).output(captor.capture());
-    DataGeneratorSchema resolvedSchema = captor.getValue();
-    assertNotNull(resolvedSchema);
-    com.google.cloud.teleport.v2.templates.model.DataGeneratorTable resolvedTable =
-        resolvedSchema.tables().get("my_table");
-    assertNotNull(resolvedTable);
-    assertEquals(500, resolvedTable.insertQps());
-  }
-
-  @Test
   public void testFetchSchemaFn_Unsupported() throws IOException {
-    FetchSchemaFn fn =
-        new FetchSchemaFn(null, "options", 1, null) { // null or dummy enum if possible
+    FetchSchemaFn fn = new FetchSchemaFn(null, "options") { // null or dummy enum if possible
           @Override
           protected String readSinkOptions(String path) throws IOException {
             return "{}";
@@ -191,7 +128,7 @@ public class SchemaLoaderTest {
   @Test
   public void testFetchSchemaFn_IOException() throws IOException {
     FetchSchemaFn fn =
-        new FetchSchemaFn(SinkType.SPANNER, "options", 1, null) {
+        new FetchSchemaFn(SinkType.SPANNER, "options") {
           @Override
           protected String readSinkOptions(String path) throws IOException {
             throw new IOException("File not found");
