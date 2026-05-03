@@ -68,7 +68,8 @@ public class ApplyOverridesFn extends DoFn<DataGeneratorSchema, DataGeneratorSch
     // Step 2: Apply overrides
     if (schemaConfig != null) {
       if (schemaConfig.getTables() != null) {
-        for (Map.Entry<String, SchemaConfig.TableConfig> entry : schemaConfig.getTables().entrySet()) {
+        for (Map.Entry<String, SchemaConfig.TableConfig> entry :
+            schemaConfig.getTables().entrySet()) {
           String tableName = entry.getKey();
           SchemaConfig.TableConfig tableConfig = entry.getValue();
           DataGeneratorTable existingTable = tableMap.get(tableName);

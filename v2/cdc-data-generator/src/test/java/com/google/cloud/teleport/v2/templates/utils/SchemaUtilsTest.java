@@ -342,58 +342,69 @@ public class SchemaUtilsTest {
     // Physical FK: EmployeeAssignments -> Departments
     // Old logic would chain: EmployeeAssignments -> Departments (because 100 < 200)
     // New logic should chain: Departments -> EmployeeAssignments (because of FK)
-    
-    DataGeneratorTable departments = DataGeneratorTable.builder()
-        .name("Departments")
-        .insertQps(200)
-        .columns(ImmutableList.of())
-        .primaryKeys(ImmutableList.of())
-        .foreignKeys(ImmutableList.of())
-        .uniqueKeys(ImmutableList.of())
-        .build();
 
-    DataGeneratorTable employees = DataGeneratorTable.builder()
-        .name("EmployeeAssignments")
-        .insertQps(100)
-        .columns(ImmutableList.of())
-        .primaryKeys(ImmutableList.of())
-        .foreignKeys(ImmutableList.of(
-            DataGeneratorForeignKey.builder()
-                .name("fk_emp_dept")
-                .keyColumns(ImmutableList.of("DeptCode"))
-                .referencedTable("Departments")
-                .referencedColumns(ImmutableList.of("DeptCode"))
-                .build()
-        ))
-        .uniqueKeys(ImmutableList.of())
-        .build();
+    DataGeneratorTable departments =
+        DataGeneratorTable.builder()
+            .name("Departments")
+            .insertQps(200)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .build();
 
-    DataGeneratorTable projects = DataGeneratorTable.builder()
-        .name("Projects")
-        .insertQps(50)
-        .columns(ImmutableList.of())
-        .primaryKeys(ImmutableList.of())
-        .foreignKeys(ImmutableList.of(
-            DataGeneratorForeignKey.builder()
-                .name("fk_proj_dept")
-                .keyColumns(ImmutableList.of("DeptCode"))
-                .referencedTable("Departments")
-                .referencedColumns(ImmutableList.of("DeptCode"))
-                .build(),
-            DataGeneratorForeignKey.builder()
-                .name("fk_proj_emp")
-                .keyColumns(ImmutableList.of("EmpId"))
-                .referencedTable("EmployeeAssignments")
-                .referencedColumns(ImmutableList.of("EmpId"))
-                .build()
-        ))
-        .uniqueKeys(ImmutableList.of())
-        .build();
+    DataGeneratorTable employees =
+        DataGeneratorTable.builder()
+            .name("EmployeeAssignments")
+            .insertQps(100)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(
+                ImmutableList.of(
+                    DataGeneratorForeignKey.builder()
+                        .name("fk_emp_dept")
+                        .keyColumns(ImmutableList.of("DeptCode"))
+                        .referencedTable("Departments")
+                        .referencedColumns(ImmutableList.of("DeptCode"))
+                        .build()))
+            .uniqueKeys(ImmutableList.of())
+            .build();
 
-    DataGeneratorSchema schema = DataGeneratorSchema.builder()
-        .dialect(SinkDialect.MYSQL)
-        .tables(ImmutableMap.of("Departments", departments, "EmployeeAssignments", employees, "Projects", projects))
-        .build();
+    DataGeneratorTable projects =
+        DataGeneratorTable.builder()
+            .name("Projects")
+            .insertQps(50)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(
+                ImmutableList.of(
+                    DataGeneratorForeignKey.builder()
+                        .name("fk_proj_dept")
+                        .keyColumns(ImmutableList.of("DeptCode"))
+                        .referencedTable("Departments")
+                        .referencedColumns(ImmutableList.of("DeptCode"))
+                        .build(),
+                    DataGeneratorForeignKey.builder()
+                        .name("fk_proj_emp")
+                        .keyColumns(ImmutableList.of("EmpId"))
+                        .referencedTable("EmployeeAssignments")
+                        .referencedColumns(ImmutableList.of("EmpId"))
+                        .build()))
+            .uniqueKeys(ImmutableList.of())
+            .build();
+
+    DataGeneratorSchema schema =
+        DataGeneratorSchema.builder()
+            .dialect(SinkDialect.MYSQL)
+            .tables(
+                ImmutableMap.of(
+                    "Departments",
+                    departments,
+                    "EmployeeAssignments",
+                    employees,
+                    "Projects",
+                    projects))
+            .build();
 
     DataGeneratorSchema dagSchema = SchemaUtils.setSchemaDAG(schema);
 

@@ -161,9 +161,8 @@ public class SchemaUtils {
         .build();
   }
 
-
-
-  private static List<DataGeneratorTable> sortTopologically(List<DataGeneratorTable> tables, Map<String, DataGeneratorTable> allTables) {
+  private static List<DataGeneratorTable> sortTopologically(
+      List<DataGeneratorTable> tables, Map<String, DataGeneratorTable> allTables) {
     List<DataGeneratorTable> sortedInput = new ArrayList<>(tables);
     // Fallback to QPS sort for independent nodes to maintain test stability
     sortedInput.sort(java.util.Comparator.comparingInt(DataGeneratorTable::insertQps));
@@ -180,7 +179,13 @@ public class SchemaUtils {
     return sorted;
   }
 
-  private static void dfs(DataGeneratorTable table, Map<String, DataGeneratorTable> allTables, Set<String> visited, Set<String> visiting, List<DataGeneratorTable> sorted, List<DataGeneratorTable> subset) {
+  private static void dfs(
+      DataGeneratorTable table,
+      Map<String, DataGeneratorTable> allTables,
+      Set<String> visited,
+      Set<String> visiting,
+      List<DataGeneratorTable> sorted,
+      List<DataGeneratorTable> subset) {
     visiting.add(table.name());
     for (DataGeneratorForeignKey fk : table.foreignKeys()) {
       String refTable = fk.referencedTable();
@@ -189,7 +194,8 @@ public class SchemaUtils {
         DataGeneratorTable parent = allTables.get(refTable);
         if (parent != null && !visited.contains(refTable)) {
           if (visiting.contains(refTable)) {
-            throw new IllegalStateException("Circular dependency detected among parents involving " + refTable);
+            throw new IllegalStateException(
+                "Circular dependency detected among parents involving " + refTable);
           }
           dfs(parent, allTables, visited, visiting, sorted, subset);
         }

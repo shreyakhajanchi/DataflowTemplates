@@ -153,6 +153,7 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
     private transient int insertQps;
     private transient int updateQps;
     private transient int deleteQps;
+    private transient int jdbcPoolSize;
 
     private static final org.slf4j.Logger LOG =
         org.slf4j.LoggerFactory.getLogger(BatchAndWriteFn.class);
@@ -232,6 +233,9 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       this.insertQps = genOptions.getInsertQps();
       this.updateQps = genOptions.getUpdateQps();
       this.deleteQps = genOptions.getDeleteQps();
+      this.jdbcPoolSize = genOptions.getJdbcPoolSize() != null
+          ? genOptions.getJdbcPoolSize()
+          : Constants.DEFAULT_JDBC_POOL_SIZE;
       if (this.writer == null) {
         if (Constants.SINK_TYPE_MYSQL.equalsIgnoreCase(sinkType)) {
           this.writer =
@@ -298,8 +302,6 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       LinkedHashMap<String, Object> pkMap = pkValuesOf(row, table);
       if (!pkMap.isEmpty()) {
         String stateKey = stateKeyOf(tableName, pkMap);
-        LOG.info("State key {}", stateKey);
-
         org.apache.beam.sdk.state.ReadableState<Row> state = activeKeys.get(stateKey);
         if (state != null && state.read() != null) {
           LOG.info(
@@ -494,7 +496,9 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
                 parentTable, parentRow, childTable, ancestorRows, activeKeys, stickyShardId);
         if (childRow == null) {
           // FK could not be resolved; skip this child emission to maintain integrity.
-          LOG.warn("Skipping child row for table {} because foreign key could not be resolved.", childTable.name());
+          LOG.warn(
+              "Skipping child row for table {} because foreign key could not be resolved.",
+              childTable.name());
           unresolvableFkChildrenDropped.inc();
           continue;
         }
@@ -1152,7 +1156,7 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PDon
       DataGeneratorTable table = bv != null ? bv.table : null;
 
       if (batch != null && !batch.isEmpty()) {
-        int maxShardConnections = Constants.DEFAULT_JDBC_POOL_SIZE;
+        int maxShardConnections = this.jdbcPoolSize;
         if (Constants.MUTATION_INSERT.equals(operation)) {
           writer.insert(batch, table, shardId, maxShardConnections);
         } else if (Constants.MUTATION_UPDATE.equals(operation)) {

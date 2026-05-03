@@ -111,6 +111,17 @@ public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions,
 
   void setMaxShards(Integer value);
 
+  @TemplateParameter.Integer(
+      order = 11,
+      optional = true,
+      description = "JDBC Connection Pool Size per Shard",
+      helpText =
+          "The maximum number of connections to open per logical shard for JDBC (MySQL) sink. Default is 10.")
+  @Default.Integer(10)
+  Integer getJdbcPoolSize();
+
+  void setJdbcPoolSize(Integer value);
+
   @TemplateParameter.GcsReadFile(
       order = 10,
       optional = true,
