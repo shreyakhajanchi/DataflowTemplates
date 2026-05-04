@@ -122,14 +122,14 @@ public class BatchAndWriteFnTest implements Serializable {
 
   @Test
   public void constructor_nullBatchSize_fallsBackToDefault() {
-    BatchAndWriteFn fn = new BatchAndWriteFn(SinkType.SPANNER, "{}", null, null);
+    BatchAndWriteFn fn = new BatchAndWriteFn(SinkType.SPANNER, "{}", null, null, null, null, null);
     assertThat(BatchAndWriteFn.DEFAULT_BATCH_SIZE).isGreaterThan(0);
     assertThat(fn).isNotNull();
   }
 
   @Test
   public void constructor_nonPositiveBatchSize_fallsBackToDefault() {
-    BatchAndWriteFn fn = new BatchAndWriteFn(SinkType.SPANNER, "{}", 0, null);
+    BatchAndWriteFn fn = new BatchAndWriteFn(SinkType.SPANNER, "{}", 0, null, null, null, null);
     assertThat(fn).isNotNull();
   }
 
@@ -529,7 +529,7 @@ public class BatchAndWriteFnTest implements Serializable {
         String sinkOptionsPath,
         Integer batchSize,
         PCollectionView<DataGeneratorSchema> schemaView) {
-      super(sinkType, sinkOptionsPath, batchSize, schemaView);
+      super(sinkType, sinkOptionsPath, batchSize, null, null, null, schemaView);
     }
 
     @Override
@@ -545,7 +545,7 @@ public class BatchAndWriteFnTest implements Serializable {
         String sinkOptionsPath,
         Integer batchSize,
         PCollectionView<DataGeneratorSchema> schemaView) {
-      super(sinkType, sinkOptionsPath, batchSize, schemaView);
+      super(sinkType, sinkOptionsPath, batchSize, null, null, null, schemaView);
     }
 
     @Override

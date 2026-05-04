@@ -175,20 +175,6 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
       SinkType sinkType,
       String sinkOptionsPath,
       Integer batchSize,
-      PCollectionView<DataGeneratorSchema> schemaView) {
-    this.sinkType = sinkType;
-    this.sinkOptionsPath = sinkOptionsPath;
-    this.batchSize = (batchSize != null && batchSize > 0) ? batchSize : DEFAULT_BATCH_SIZE;
-    this.jdbcPoolSize = null;
-    this.updateInterval = null;
-    this.deleteInterval = null;
-    this.schemaView = schemaView;
-  }
-
-  public BatchAndWriteFn(
-      SinkType sinkType,
-      String sinkOptionsPath,
-      Integer batchSize,
       Integer jdbcPoolSize,
       Integer updateInterval,
       Integer deleteInterval,
@@ -496,7 +482,7 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
         deleteTimestamp = now + upInterval * numUpdates + delInterval;
       }
 
-      // Cap or compress updates so they land strictly before the earliest ancestor delete AND our
+      // Compress updates so they land strictly before the earliest ancestor delete AND our
       // own forced delete (whichever is tighter).
       long myDeleteBound = deleteTimestamp > 0 ? deleteTimestamp : Long.MAX_VALUE;
       long effectiveDeleteBound = Math.min(myDeleteBound, earliestAncestorDelete);
