@@ -15,47 +15,54 @@
  */
 package com.google.cloud.teleport.v2.templates.mysql;
 
-import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertEquals;
 
+import com.google.cloud.spanner.Dialect;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 
-@RunWith(JUnit4.class)
 public class MySqlTypeMapperTest {
 
   private final MySqlTypeMapper mapper = new MySqlTypeMapper();
 
   @Test
-  public void testGetLogicalType_allTypes() {
-    assertThat(mapper.getLogicalType("BIT", null, null)).isEqualTo(LogicalType.BOOLEAN);
-    assertThat(mapper.getLogicalType("BOOLEAN", null, null)).isEqualTo(LogicalType.BOOLEAN);
-    assertThat(mapper.getLogicalType("TINYINT", null, 1L)).isEqualTo(LogicalType.BOOLEAN);
-    assertThat(mapper.getLogicalType("TINYINT(1)", null, 1L)).isEqualTo(LogicalType.BOOLEAN);
-    assertThat(mapper.getLogicalType("TINYINT", null, 2L)).isEqualTo(LogicalType.INT64);
-    assertThat(mapper.getLogicalType("TINYINT(2)", null, 2L)).isEqualTo(LogicalType.INT64);
-    assertThat(mapper.getLogicalType("smallint", null, null)).isEqualTo(LogicalType.INT64);
-    assertThat(mapper.getLogicalType("MEDIUMINT", null, null)).isEqualTo(LogicalType.INT64);
-    assertThat(mapper.getLogicalType("INT", null, null)).isEqualTo(LogicalType.INT64);
-    assertThat(mapper.getLogicalType("BIGINT", null, null)).isEqualTo(LogicalType.INT64);
-    assertThat(mapper.getLogicalType("FLOAT", null, null)).isEqualTo(LogicalType.FLOAT64);
-    assertThat(mapper.getLogicalType("DOUBLE", null, null)).isEqualTo(LogicalType.FLOAT64);
-    assertThat(mapper.getLogicalType("DECIMAL", null, null)).isEqualTo(LogicalType.NUMERIC);
-    assertThat(mapper.getLogicalType("DECIMAL(10,2)", null, null)).isEqualTo(LogicalType.NUMERIC);
-    assertThat(mapper.getLogicalType("CHAR", null, null)).isEqualTo(LogicalType.STRING);
-    assertThat(mapper.getLogicalType("VARCHAR(255)", null, null)).isEqualTo(LogicalType.STRING);
-    assertThat(mapper.getLogicalType("TEXT", null, null)).isEqualTo(LogicalType.STRING);
-    assertThat(mapper.getLogicalType("ENUM('a','b')", null, null)).isEqualTo(LogicalType.STRING);
-    assertThat(mapper.getLogicalType("BINARY", null, null)).isEqualTo(LogicalType.BYTES);
-    assertThat(mapper.getLogicalType("BLOB", null, null)).isEqualTo(LogicalType.BYTES);
-    assertThat(mapper.getLogicalType("DATE", null, null)).isEqualTo(LogicalType.DATE);
-    assertThat(mapper.getLogicalType("TIME", null, null)).isEqualTo(LogicalType.TIMESTAMP);
-    assertThat(mapper.getLogicalType("TIMESTAMP", null, null)).isEqualTo(LogicalType.TIMESTAMP);
-    assertThat(mapper.getLogicalType("DATETIME", null, null)).isEqualTo(LogicalType.TIMESTAMP);
-    assertThat(mapper.getLogicalType("JSON", null, null)).isEqualTo(LogicalType.JSON);
-    assertThat(mapper.getLogicalType("UNKNOWN_TYPE", null, null)).isEqualTo(LogicalType.STRING);
-    assertThrows(IllegalArgumentException.class, () -> mapper.getLogicalType(null, null, null));
+  public void testMySqlMapping() {
+    verifyMapping("BIT", LogicalType.BOOLEAN);
+    verifyMapping("BOOLEAN", LogicalType.BOOLEAN);
+    verifyMapping("BOOL", LogicalType.BOOLEAN);
+    verifyMapping("TINYINT", LogicalType.INT64);
+    assertEquals(
+        LogicalType.BOOLEAN, mapper.getLogicalType("TINYINT", Dialect.GOOGLE_STANDARD_SQL, 1L));
+    verifyMapping("SMALLINT", LogicalType.INT64);
+    verifyMapping("INTEGER", LogicalType.INT64);
+    verifyMapping("INT", LogicalType.INT64);
+    verifyMapping("BIGINT", LogicalType.INT64);
+    verifyMapping("FLOAT", LogicalType.FLOAT64);
+    verifyMapping("REAL", LogicalType.FLOAT64);
+    verifyMapping("DOUBLE", LogicalType.FLOAT64);
+    verifyMapping("NUMERIC", LogicalType.NUMERIC);
+    verifyMapping("DECIMAL", LogicalType.NUMERIC);
+    verifyMapping("CHAR", LogicalType.STRING);
+    verifyMapping("VARCHAR(255)", LogicalType.STRING);
+    verifyMapping("TEXT", LogicalType.STRING);
+    verifyMapping("MEDIUMTEXT", LogicalType.STRING);
+    verifyMapping("LONGTEXT", LogicalType.STRING);
+    verifyMapping("BINARY", LogicalType.BYTES);
+    verifyMapping("VARBINARY", LogicalType.BYTES);
+    verifyMapping("BLOB", LogicalType.BYTES);
+    verifyMapping("DATE", LogicalType.DATE);
+    verifyMapping("TIME", LogicalType.TIMESTAMP);
+    verifyMapping("DATETIME", LogicalType.TIMESTAMP);
+    verifyMapping("TIMESTAMP", LogicalType.TIMESTAMP);
+    verifyMapping("JSON", LogicalType.JSON);
+    verifyMapping("UNKNOWN", LogicalType.STRING);
+    verifyMapping(null, LogicalType.STRING);
+  }
+
+  private void verifyMapping(String inputType, LogicalType expected) {
+    assertEquals(
+        "Failed for type: " + inputType,
+        expected,
+        mapper.getLogicalType(inputType, Dialect.GOOGLE_STANDARD_SQL));
   }
 }

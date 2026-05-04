@@ -26,5 +26,8 @@ public enum LogicalType {
   TIMESTAMP,
   NUMERIC,
   JSON,
-  // Todo: Add support for Array datatype
+  ARRAY,
+  STRUCT,
+  UUID,
+  ENUM
 }

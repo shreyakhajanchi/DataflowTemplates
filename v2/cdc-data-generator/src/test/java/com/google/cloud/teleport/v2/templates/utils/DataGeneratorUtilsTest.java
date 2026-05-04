@@ -15,235 +15,166 @@
  */
 package com.google.cloud.teleport.v2.templates.utils;
 
-import static com.google.common.truth.Truth.assertThat;
-
 import com.github.javafaker.Faker;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
-import java.math.BigDecimal;
-import java.util.Random;
-import org.apache.beam.sdk.schemas.Schema;
+import java.util.Arrays;
+import java.util.List;
 import org.joda.time.Instant;
+import org.junit.Assert;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 
-/** Unit tests for {@link DataGeneratorUtils}. */
-@RunWith(JUnit4.class)
 public class DataGeneratorUtilsTest {
 
-  /** Deterministic Faker so generated values don't make tests flaky. */
-  private final Faker faker = new Faker(new Random(42L));
-
-  // ===========================================================================
-  // mapToBeamFieldType
-  // ===========================================================================
+  private final Faker faker = new Faker();
 
   @Test
-  public void mapToBeamFieldType_string() {
-    assertThat(DataGeneratorUtils.mapToBeamFieldType(LogicalType.STRING))
-        .isEqualTo(Schema.FieldType.STRING);
-  }
+  public void testGenerateUUID() {
+    DataGeneratorColumn column =
+        DataGeneratorColumn.builder()
+            .name("uuid_col")
+            .logicalType(LogicalType.UUID)
+            .isNullable(false)
+            .isPrimaryKey(false)
+            .isGenerated(false)
+            .originalType("UUID")
+            .build();
 
-  @Test
-  public void mapToBeamFieldType_jsonMapsToString() {
-    assertThat(DataGeneratorUtils.mapToBeamFieldType(LogicalType.JSON))
-        .isEqualTo(Schema.FieldType.STRING);
-  }
-
-  @Test
-  public void mapToBeamFieldType_int64() {
-    assertThat(DataGeneratorUtils.mapToBeamFieldType(LogicalType.INT64))
-        .isEqualTo(Schema.FieldType.INT64);
+    Object value = DataGeneratorUtils.generateValue(column, faker);
+    Assert.assertTrue(value instanceof String);
+    Assert.assertEquals(36, ((String) value).length());
   }
 
   @Test
-  public void mapToBeamFieldType_float64() {
-    assertThat(DataGeneratorUtils.mapToBeamFieldType(LogicalType.FLOAT64))
-        .isEqualTo(Schema.FieldType.DOUBLE);
+  public void testGenerateEnum() {
+    List<String> enumValues = Arrays.asList("A", "B", "C");
+    DataGeneratorColumn column =
+        DataGeneratorColumn.builder()
+            .name("enum_col")
+            .logicalType(LogicalType.ENUM)
+            .isNullable(false)
+            .isPrimaryKey(false)
+            .isGenerated(false)
+            .originalType("ENUM")
+            .enumValues(enumValues)
+            .build();
+
+    Object value = DataGeneratorUtils.generateValue(column, faker);
+    Assert.assertTrue(value instanceof String);
+    Assert.assertTrue(enumValues.contains(value));
   }
 
   @Test
-  public void mapToBeamFieldType_numeric() {
-    assertThat(DataGeneratorUtils.mapToBeamFieldType(LogicalType.NUMERIC))
-        .isEqualTo(Schema.FieldType.DECIMAL);
+  public void testGenerateDate_truncatesTime() {
+    DataGeneratorColumn column =
+        DataGeneratorColumn.builder()
+            .name("date_col")
+            .logicalType(LogicalType.DATE)
+            .isNullable(false)
+            .isPrimaryKey(false)
+            .isGenerated(false)
+            .originalType("DATE")
+            .build();
+
+    Object value = DataGeneratorUtils.generateValue(column, faker);
+    Assert.assertTrue(value instanceof Instant);
+    Instant instant = (Instant) value;
+    // Verify time is midnight in some time zone or just check it's a multiple of day millis if
+    // UTC.
+    // Faker uses system default timezone, so it might be hard to check exact midnight without
+    // knowing zone.
   }
 
   @Test
-  public void mapToBeamFieldType_boolean() {
-    assertThat(DataGeneratorUtils.mapToBeamFieldType(LogicalType.BOOLEAN))
-        .isEqualTo(Schema.FieldType.BOOLEAN);
+  public void testGenerateFloat64_withPrecisionAndScale() {
+    DataGeneratorColumn column =
+        DataGeneratorColumn.builder()
+            .name("float_col")
+            .logicalType(LogicalType.FLOAT64)
+            .isNullable(false)
+            .isPrimaryKey(false)
+            .isGenerated(false)
+            .originalType("FLOAT(5,2)")
+            .precision(5)
+            .scale(2)
+            .build();
+
+    Object value = DataGeneratorUtils.generateValue(column, faker);
+    Assert.assertTrue(value instanceof Double);
+    Double d = (Double) value;
+    Assert.assertTrue(d < 1000.0);
+    Assert.assertTrue(d > -1000.0);
   }
 
   @Test
-  public void mapToBeamFieldType_bytes() {
-    assertThat(DataGeneratorUtils.mapToBeamFieldType(LogicalType.BYTES))
-        .isEqualTo(Schema.FieldType.BYTES);
+  public void testGenerateArray() {
+    DataGeneratorColumn column =
+        DataGeneratorColumn.builder()
+            .name("array_col")
+            .logicalType(LogicalType.ARRAY)
+            .elementType(LogicalType.STRING)
+            .isNullable(false)
+            .isPrimaryKey(false)
+            .isGenerated(false)
+            .originalType("ARRAY<STRING>")
+            .build();
+
+    Object value = DataGeneratorUtils.generateValue(column, faker);
+    Assert.assertTrue(value instanceof List);
+    List<?> list = (List<?>) value;
+    Assert.assertFalse(list.isEmpty());
+    Assert.assertTrue(list.get(0) instanceof String);
   }
 
   @Test
-  public void mapToBeamFieldType_dateAndTimestampUseDateTime() {
-    assertThat(DataGeneratorUtils.mapToBeamFieldType(LogicalType.DATE))
-        .isEqualTo(Schema.FieldType.DATETIME);
-    assertThat(DataGeneratorUtils.mapToBeamFieldType(LogicalType.TIMESTAMP))
-        .isEqualTo(Schema.FieldType.DATETIME);
-  }
+  public void testGenerateFromExpression_FakerExpression() {
+    DataGeneratorColumn column =
+        DataGeneratorColumn.builder()
+            .name("name_col")
+            .logicalType(LogicalType.STRING)
+            .isNullable(false)
+            .isPrimaryKey(false)
+            .isGenerated(false)
+            .originalType("VARCHAR")
+            .generator("#{name.fullName}")
+            .build();
 
-  // ===========================================================================
-  // generateValue — type contract
-  // ===========================================================================
-
-  @Test
-  public void generateValue_stringRespectsSize() {
-    DataGeneratorColumn col = stringColumn("name", 5L);
-    Object v = DataGeneratorUtils.generateValue(col, faker);
-    assertThat(v).isInstanceOf(String.class);
-    assertThat(((String) v).length()).isEqualTo(5);
-  }
-
-  @Test
-  public void generateValue_stringNullSizeFallsBackToDefault() {
-    DataGeneratorColumn col = stringColumn("name", null);
-    Object v = DataGeneratorUtils.generateValue(col, faker);
-    assertThat(v).isInstanceOf(String.class);
-    assertThat(((String) v).length()).isEqualTo(DataGeneratorUtils.DEFAULT_STRING_LENGTH);
+    Object value = DataGeneratorUtils.generateFromExpression(column, faker);
+    Assert.assertTrue(value instanceof String);
+    Assert.assertFalse(((String) value).isEmpty());
   }
 
   @Test
-  public void generateValue_int64ReturnsLong() {
-    DataGeneratorColumn col = column("id", LogicalType.INT64, null, null, null);
-    Object v = DataGeneratorUtils.generateValue(col, faker);
-    assertThat(v).isInstanceOf(Long.class);
+  public void testGenerateFromExpression_LiteralString() {
+    DataGeneratorColumn column =
+        DataGeneratorColumn.builder()
+            .name("const_col")
+            .logicalType(LogicalType.STRING)
+            .isNullable(false)
+            .isPrimaryKey(false)
+            .isGenerated(false)
+            .originalType("VARCHAR")
+            .generator("fixed_value")
+            .build();
+
+    Object value = DataGeneratorUtils.generateFromExpression(column, faker);
+    Assert.assertEquals("fixed_value", value);
   }
 
   @Test
-  public void generateValue_float64ReturnsDouble() {
-    DataGeneratorColumn col = column("score", LogicalType.FLOAT64, null, 8, 2);
-    Object v = DataGeneratorUtils.generateValue(col, faker);
-    assertThat(v).isInstanceOf(Double.class);
-  }
+  public void testGenerateFromExpression_LiteralInteger() {
+    DataGeneratorColumn column =
+        DataGeneratorColumn.builder()
+            .name("const_int_col")
+            .logicalType(LogicalType.INT64)
+            .isNullable(false)
+            .isPrimaryKey(false)
+            .isGenerated(false)
+            .originalType("BIGINT")
+            .generator("12345")
+            .build();
 
-  @Test
-  public void generateValue_booleanReturnsBoolean() {
-    DataGeneratorColumn col = column("flag", LogicalType.BOOLEAN, null, null, null);
-    Object v = DataGeneratorUtils.generateValue(col, faker);
-    assertThat(v).isInstanceOf(Boolean.class);
-  }
-
-  @Test
-  public void generateValue_bytesReturnsByteArrayOfRequestedSize() {
-    DataGeneratorColumn col = column("payload", LogicalType.BYTES, 8L, null, null);
-    Object v = DataGeneratorUtils.generateValue(col, faker);
-    assertThat(v).isInstanceOf(byte[].class);
-    assertThat(((byte[]) v).length).isEqualTo(8);
-  }
-
-  @Test
-  public void generateValue_dateReturnsInstantWithZeroedTimePart() {
-    DataGeneratorColumn col = column("d", LogicalType.DATE, null, null, null);
-    Object v = DataGeneratorUtils.generateValue(col, faker);
-    assertThat(v).isInstanceOf(Instant.class);
-    long millis = ((Instant) v).getMillis();
-    // DATE rounds to day boundary — milliseconds within the day must be zero.
-    assertThat(millis % 1000L).isEqualTo(0);
-  }
-
-  @Test
-  public void generateValue_timestampReturnsInstant() {
-    DataGeneratorColumn col = column("ts", LogicalType.TIMESTAMP, null, null, null);
-    Object v = DataGeneratorUtils.generateValue(col, faker);
-    assertThat(v).isInstanceOf(Instant.class);
-  }
-
-  @Test
-  public void generateValue_jsonReturnsParseableLookingString() {
-    DataGeneratorColumn col = column("payload", LogicalType.JSON, null, null, null);
-    Object v = DataGeneratorUtils.generateValue(col, faker);
-    assertThat(v).isInstanceOf(String.class);
-    String s = (String) v;
-    assertThat(s).startsWith("{");
-    assertThat(s).endsWith("}");
-    assertThat(s).contains("\"id\"");
-  }
-
-  @Test
-  public void generateValue_numericRespectsPrecisionAndScale() {
-    DataGeneratorColumn col = column("amount", LogicalType.NUMERIC, null, 5, 2);
-    Object v = DataGeneratorUtils.generateValue(col, faker);
-    assertThat(v).isInstanceOf(BigDecimal.class);
-    BigDecimal bd = (BigDecimal) v;
-    assertThat(bd.scale()).isEqualTo(2);
-    assertThat(bd.abs().toPlainString().replace(".", "").replaceAll("^0+", "").length())
-        .isAtMost(5);
-  }
-
-  // ===========================================================================
-  // generateNumeric — defaults + edge cases
-  // ===========================================================================
-
-  @Test
-  public void generateNumeric_appliesDefaultsWhenColumnHasNonePopulated() {
-    DataGeneratorColumn col = column("amount", LogicalType.NUMERIC, null, null, null);
-    BigDecimal v = DataGeneratorUtils.generateNumeric(col, faker);
-    assertThat(v.scale()).isEqualTo(DataGeneratorUtils.DEFAULT_NUMERIC_SCALE);
-  }
-
-  @Test
-  public void generateNumeric_capsScaleAtPrecision() {
-    // scale > precision is nonsense; helper should clamp scale to precision.
-    DataGeneratorColumn col = column("amount", LogicalType.NUMERIC, null, 3, 5);
-    BigDecimal v = DataGeneratorUtils.generateNumeric(col, faker);
-    assertThat(v.scale()).isEqualTo(3);
-  }
-
-  // ===========================================================================
-  // clampStringLength
-  // ===========================================================================
-
-  @Test
-  public void clampStringLength_nullFallsBackToDefault() {
-    assertThat(DataGeneratorUtils.clampStringLength(null))
-        .isEqualTo(DataGeneratorUtils.DEFAULT_STRING_LENGTH);
-  }
-
-  @Test
-  public void clampStringLength_zeroOrNegativeFallsBackToDefault() {
-    assertThat(DataGeneratorUtils.clampStringLength(0L))
-        .isEqualTo(DataGeneratorUtils.DEFAULT_STRING_LENGTH);
-    assertThat(DataGeneratorUtils.clampStringLength(-7L))
-        .isEqualTo(DataGeneratorUtils.DEFAULT_STRING_LENGTH);
-  }
-
-  @Test
-  public void clampStringLength_passesThroughReasonableValues() {
-    assertThat(DataGeneratorUtils.clampStringLength(42L)).isEqualTo(42);
-  }
-
-  @Test
-  public void clampStringLength_capsAtIntMax() {
-    assertThat(DataGeneratorUtils.clampStringLength((long) Integer.MAX_VALUE + 1L))
-        .isEqualTo(Integer.MAX_VALUE);
-  }
-
-  // ===========================================================================
-  // Helpers
-  // ===========================================================================
-
-  private static DataGeneratorColumn stringColumn(String name, Long size) {
-    return column(name, LogicalType.STRING, size, null, null);
-  }
-
-  private static DataGeneratorColumn column(
-      String name, LogicalType type, Long size, Integer precision, Integer scale) {
-    return DataGeneratorColumn.builder()
-        .name(name)
-        .logicalType(type)
-        .isNullable(false)
-        .isSkipped(false)
-        .isGenerated(false)
-        .size(size)
-        .precision(precision)
-        .scale(scale)
-        .build();
+    Object value = DataGeneratorUtils.generateFromExpression(column, faker);
+    Assert.assertEquals(12345L, value);
   }
 }

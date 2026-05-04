@@ -15,26 +15,20 @@
  */
 package com.google.cloud.teleport.v2.templates.spanner;
 
+import com.google.cloud.spanner.Dialect;
 import com.google.cloud.teleport.v2.spanner.ddl.Ddl;
 import com.google.cloud.teleport.v2.spanner.migrations.spanner.SpannerSchema;
+import com.google.cloud.teleport.v2.templates.common.SinkSchemaFetcher;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorUniqueKey;
-import com.google.cloud.teleport.v2.templates.sink.SinkSchemaFetcher;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.nio.channels.Channels;
-import java.nio.channels.ReadableByteChannel;
 import java.util.Map;
 import java.util.stream.Collectors;
-import org.apache.beam.sdk.io.FileSystems;
-import org.apache.beam.sdk.io.fs.MatchResult;
-import org.apache.beam.sdk.io.fs.ResourceId;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerAccessor;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
 import org.apache.beam.sdk.options.ValueProvider.StaticValueProvider;
@@ -42,53 +36,23 @@ import org.json.JSONObject;
 
 public class SpannerSchemaFetcher implements SinkSchemaFetcher {
 
-  @FunctionalInterface
-  interface DdlFetcher {
-    Ddl fetch(SpannerConfig spannerConfig);
-  }
-
-  @FunctionalInterface
-  interface SpannerAccessorFetcher {
-    SpannerAccessor get(SpannerConfig spannerConfig);
-  }
-
   private String projectId;
   private String instanceId;
   private String databaseId;
-
+  private int qps;
   private final SpannerTypeMapper typeMapper = new SpannerTypeMapper();
 
-  private final DdlFetcher ddlFetcher;
-
-  public SpannerSchemaFetcher() {
-    this(SpannerSchema::getInformationSchemaAsDdl);
-  }
-
-  @VisibleForTesting
-  SpannerSchemaFetcher(DdlFetcher ddlFetcher) {
-    this.ddlFetcher = ddlFetcher;
+  @Override
+  public void init(String optionsFilePath, String jsonData) {
+    JSONObject json = new JSONObject(jsonData);
+    this.projectId = json.getString("projectId");
+    this.instanceId = json.getString("instanceId");
+    this.databaseId = json.getString("databaseId");
   }
 
   @Override
-  public void init(String sinkConfigPath) {
-    try {
-      MatchResult match = FileSystems.match(sinkConfigPath);
-      if (match.metadata().isEmpty()) {
-        throw new RuntimeException("Spanner sink config file not found: " + sinkConfigPath);
-      }
-      ResourceId resourceId = match.metadata().get(0).resourceId();
-      ReadableByteChannel channel = FileSystems.open(resourceId);
-      String content;
-      try (BufferedReader reader = new BufferedReader(Channels.newReader(channel, "UTF-8"))) {
-        content = reader.lines().collect(Collectors.joining(System.lineSeparator()));
-      }
-      JSONObject json = new JSONObject(content);
-      this.projectId = json.getString("projectId");
-      this.instanceId = json.getString("instanceId");
-      this.databaseId = json.getString("databaseId");
-    } catch (java.io.IOException e) {
-      throw new RuntimeException("Error reading Spanner sink config file: " + sinkConfigPath, e);
-    }
+  public void setQps(int qps) {
+    this.qps = qps;
   }
 
   @Override
@@ -98,28 +62,25 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
             .withProjectId(StaticValueProvider.of(projectId))
             .withInstanceId(StaticValueProvider.of(instanceId))
             .withDatabaseId(StaticValueProvider.of(databaseId));
-    try {
-      Ddl ddl = ddlFetcher.fetch(spannerConfig);
-      return mapToDataGeneratorSchema(ddl);
-    } catch (Exception e) {
-      throw new IOException("Failed to fetch Spanner schema", e);
-    }
+    Ddl ddl = fetchDdl(spannerConfig);
+    return mapToDataGeneratorSchema(ddl);
   }
 
   private DataGeneratorSchema mapToDataGeneratorSchema(Ddl ddl) {
+    Dialect dialect = ddl.dialect();
+
     Map<String, DataGeneratorTable> tables =
         ddl.allTables().stream()
             .collect(
                 Collectors.toMap(
                     com.google.cloud.teleport.v2.spanner.ddl.Table::name,
-                    table -> mapTable(table, ddl.dialect())));
+                    table -> mapTable(table, dialect)));
 
     return DataGeneratorSchema.builder().tables(ImmutableMap.copyOf(tables)).build();
   }
 
   private DataGeneratorTable mapTable(
-      com.google.cloud.teleport.v2.spanner.ddl.Table table,
-      com.google.cloud.spanner.Dialect dialect) {
+      com.google.cloud.teleport.v2.spanner.ddl.Table table, Dialect dialect) {
     ImmutableList.Builder<DataGeneratorColumn> columnsBuilder = ImmutableList.builder();
     for (com.google.cloud.teleport.v2.spanner.ddl.Column column : table.columns()) {
       columnsBuilder.add(mapColumn(column, table, dialect));
@@ -140,22 +101,26 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
 
     ImmutableList.Builder<DataGeneratorUniqueKey> uniqueKeysBuilder = ImmutableList.builder();
     if (table.indexes() != null) {
-      for (com.google.cloud.teleport.v2.spanner.ddl.Index index : table.indexes()) {
-        // Ignore PRIMARY_KEY and only include unique indices
-        if (index.unique() && !"PRIMARY_KEY".equalsIgnoreCase(index.name())) {
-          uniqueKeysBuilder.add(
-              DataGeneratorUniqueKey.builder()
-                  .name(index.name())
-                  .columns(
-                      index.indexColumns().stream()
-                          .filter(
-                              c ->
-                                  c.order()
-                                      != com.google.cloud.teleport.v2.spanner.ddl.IndexColumn.Order
-                                          .STORING)
-                          .map(com.google.cloud.teleport.v2.spanner.ddl.IndexColumn::name)
-                          .collect(ImmutableList.toImmutableList()))
-                  .build());
+      for (Object indexObj : table.indexes()) {
+        if (indexObj instanceof com.google.cloud.teleport.v2.spanner.ddl.Index) {
+          com.google.cloud.teleport.v2.spanner.ddl.Index index =
+              (com.google.cloud.teleport.v2.spanner.ddl.Index) indexObj;
+          // Ignore PRIMARY_KEY and only include unique indices
+          if (index != null && index.unique() && !"PRIMARY_KEY".equalsIgnoreCase(index.name())) {
+            uniqueKeysBuilder.add(
+                DataGeneratorUniqueKey.builder()
+                    .name(index.name())
+                    .keyColumns(
+                        index.indexColumns().stream()
+                            .filter(
+                                c ->
+                                    c.order()
+                                        != com.google.cloud.teleport.v2.spanner.ddl.IndexColumn
+                                            .Order.STORING)
+                            .map(com.google.cloud.teleport.v2.spanner.ddl.IndexColumn::name)
+                            .collect(ImmutableList.toImmutableList()))
+                    .build());
+          }
         }
       }
     }
@@ -171,26 +136,49 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
         .foreignKeys(fksBuilder.build())
         .uniqueKeys(uniqueKeysBuilder.build())
         .isRoot(table.interleavingParent() == null)
-        .insertQps(0)
-        .updateQps(0) // Default value
-        .deleteQps(0) // Default value
-        .recordsPerTick(1) // Default value
+        .insertQps(qps)
         .build();
   }
 
   private DataGeneratorColumn mapColumn(
       com.google.cloud.teleport.v2.spanner.ddl.Column column,
       com.google.cloud.teleport.v2.spanner.ddl.Table table,
-      com.google.cloud.spanner.Dialect dialect) {
+      Dialect dialect) {
+    boolean isPrimaryKey =
+        table.primaryKeys().stream().anyMatch(pk -> pk.name().equals(column.name()));
+
+    com.google.cloud.teleport.v2.templates.model.LogicalType logicalType =
+        typeMapper.getLogicalType(column.typeString(), dialect);
+    com.google.cloud.teleport.v2.templates.model.LogicalType elementType = null;
+    if (logicalType == com.google.cloud.teleport.v2.templates.model.LogicalType.ARRAY) {
+      String typeStr = column.typeString();
+      int start = typeStr.indexOf("<");
+      int end = typeStr.lastIndexOf(">");
+      if (start != -1 && end != -1 && end > start) {
+        String elementTypeStr = typeStr.substring(start + 1, end).trim();
+        elementType = typeMapper.getLogicalType(elementTypeStr, dialect);
+      }
+    }
 
     return DataGeneratorColumn.builder()
         .name(column.name())
-        .logicalType(typeMapper.getLogicalType(column.typeString(), dialect, null))
+        .logicalType(logicalType)
         .isNullable(!column.notNull())
+        .isPrimaryKey(isPrimaryKey)
         .isGenerated(column.isGenerated())
+        .originalType(column.typeString())
         .size(column.size() != null ? Long.valueOf(column.size()) : null)
         .precision(null)
         .scale(null)
+        .elementType(elementType)
         .build();
+  }
+
+  protected SpannerAccessor getSpannerAccessor(SpannerConfig spannerConfig) {
+    return SpannerAccessor.getOrCreate(spannerConfig);
+  }
+
+  protected Ddl fetchDdl(SpannerConfig spannerConfig) {
+    return SpannerSchema.getInformationSchemaAsDdl(spannerConfig);
   }
 }

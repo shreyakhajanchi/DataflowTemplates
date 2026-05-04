@@ -27,7 +27,7 @@ public abstract class DataGeneratorUniqueKey implements Serializable {
   public abstract String name();
 
   /** The columns that make up the unique key. */
-  public abstract ImmutableList<String> columns();
+  public abstract ImmutableList<String> keyColumns();
 
   public static Builder builder() {
     return new AutoValue_DataGeneratorUniqueKey.Builder();
@@ -37,7 +37,7 @@ public abstract class DataGeneratorUniqueKey implements Serializable {
   public abstract static class Builder {
     public abstract Builder name(String name);
 
-    public abstract Builder columns(ImmutableList<String> columns);
+    public abstract Builder keyColumns(ImmutableList<String> keyColumns);
 
     public abstract DataGeneratorUniqueKey build();
   }

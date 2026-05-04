@@ -35,19 +35,16 @@ public class FailureRecordTest {
 
   @Test
   public void toJson_topLevelKeys() {
-    String json =
-        FailureRecord.toJson("Users", "INSERT", null, new RuntimeException("boom"));
+    String json = FailureRecord.toJson("Users", "INSERT", null, new RuntimeException("boom"));
     JSONObject obj = new JSONObject(json);
-    assertThat(obj.keySet())
-        .containsExactly("timestamp", "table", "operation", "row", "error");
+    assertThat(obj.keySet()).containsExactly("timestamp", "table", "operation", "row", "error");
     assertThat(obj.getString("table")).isEqualTo("Users");
     assertThat(obj.getString("operation")).isEqualTo("INSERT");
   }
 
   @Test
   public void toJson_nullRowFlowsThroughAsJsonNull() {
-    String json =
-        FailureRecord.toJson("Users", "INSERT", null, new RuntimeException("err"));
+    String json = FailureRecord.toJson("Users", "INSERT", null, new RuntimeException("err"));
     JSONObject obj = new JSONObject(json);
     assertThat(obj.isNull("row")).isTrue();
   }
@@ -74,8 +71,8 @@ public class FailureRecordTest {
             .build();
     Row row = Row.withSchema(schema).addValues("Alice", 30L, true).build();
 
-    JSONObject obj = new JSONObject(
-        FailureRecord.toJson("T", "UPDATE", row, new RuntimeException("e")));
+    JSONObject obj =
+        new JSONObject(FailureRecord.toJson("T", "UPDATE", row, new RuntimeException("e")));
     JSONObject rowJson = obj.getJSONObject("row");
     assertThat(rowJson.getString("name")).isEqualTo("Alice");
     assertThat(rowJson.getLong("age")).isEqualTo(30L);
@@ -87,20 +84,19 @@ public class FailureRecordTest {
     Schema schema = Schema.builder().addByteArrayField("payload").build();
     Row row = Row.withSchema(schema).addValue(new byte[] {0x00, 0x0a, (byte) 0xff}).build();
 
-    JSONObject obj = new JSONObject(
-        FailureRecord.toJson("T", "INSERT", row, new RuntimeException("e")));
+    JSONObject obj =
+        new JSONObject(FailureRecord.toJson("T", "INSERT", row, new RuntimeException("e")));
     String hex = obj.getJSONObject("row").getString("payload");
     assertThat(hex).isEqualTo("0x000aff");
   }
 
   @Test
   public void toJson_byteBufferFieldHexEncoded() {
-    Schema schema =
-        Schema.builder().addField("payload", Schema.FieldType.BYTES).build();
+    Schema schema = Schema.builder().addField("payload", Schema.FieldType.BYTES).build();
     Row row = Row.withSchema(schema).addValue(ByteBuffer.wrap(new byte[] {1, 2, 3})).build();
 
-    JSONObject obj = new JSONObject(
-        FailureRecord.toJson("T", "INSERT", row, new RuntimeException("e")));
+    JSONObject obj =
+        new JSONObject(FailureRecord.toJson("T", "INSERT", row, new RuntimeException("e")));
     // Beam may unbox ByteBuffer to byte[] internally before getValue returns; either path yields
     // the hex representation, never a JVM object id.
     String hex = obj.getJSONObject("row").getString("payload");
@@ -113,8 +109,8 @@ public class FailureRecordTest {
     Schema schema = Schema.builder().addNullableField("name", Schema.FieldType.STRING).build();
     Row row = Row.withSchema(schema).addValue(null).build();
 
-    JSONObject obj = new JSONObject(
-        FailureRecord.toJson("T", "INSERT", row, new RuntimeException("e")));
+    JSONObject obj =
+        new JSONObject(FailureRecord.toJson("T", "INSERT", row, new RuntimeException("e")));
     assertThat(obj.getJSONObject("row").isNull("name")).isTrue();
   }
 
@@ -123,8 +119,8 @@ public class FailureRecordTest {
     Schema schema = Schema.builder().build();
     Row row = Row.withSchema(schema).build();
 
-    JSONObject obj = new JSONObject(
-        FailureRecord.toJson("T", "INSERT", row, new RuntimeException("e")));
+    JSONObject obj =
+        new JSONObject(FailureRecord.toJson("T", "INSERT", row, new RuntimeException("e")));
     JSONObject rowJson = obj.getJSONObject("row");
     assertThat(rowJson.length()).isEqualTo(0);
   }
@@ -136,8 +132,7 @@ public class FailureRecordTest {
   @Test
   public void toJson_errorIncludesClassMessageAndStack() {
     RuntimeException ex = new RuntimeException("something failed");
-    JSONObject obj = new JSONObject(
-        FailureRecord.toJson("T", "INSERT", null, ex));
+    JSONObject obj = new JSONObject(FailureRecord.toJson("T", "INSERT", null, ex));
     JSONObject err = obj.getJSONObject("error");
     assertThat(err.getString("class")).isEqualTo("java.lang.RuntimeException");
     assertThat(err.getString("message")).isEqualTo("something failed");
@@ -147,8 +142,7 @@ public class FailureRecordTest {
   @Test
   public void toJson_errorWithNullMessageRendersEmptyString() {
     RuntimeException ex = new RuntimeException();
-    JSONObject obj = new JSONObject(
-        FailureRecord.toJson("T", "INSERT", null, ex));
+    JSONObject obj = new JSONObject(FailureRecord.toJson("T", "INSERT", null, ex));
     assertThat(obj.getJSONObject("error").getString("message")).isEmpty();
   }
 
@@ -156,8 +150,7 @@ public class FailureRecordTest {
   public void toJson_errorWithCausePropagatesStackTrace() {
     Throwable cause = new IllegalStateException("inner");
     RuntimeException ex = new RuntimeException("outer", cause);
-    JSONObject obj = new JSONObject(
-        FailureRecord.toJson("T", "INSERT", null, ex));
+    JSONObject obj = new JSONObject(FailureRecord.toJson("T", "INSERT", null, ex));
     String stack = obj.getJSONObject("error").getString("stackTrace");
     assertThat(stack).contains("Caused by");
     assertThat(stack).contains("IllegalStateException");
@@ -174,9 +167,10 @@ public class FailureRecordTest {
 
   @Test
   public void toJson_generationOperation() {
-    JSONObject obj = new JSONObject(
-        FailureRecord.toJson("T", FailureRecord.OPERATION_GENERATION, null,
-            new RuntimeException("e")));
+    JSONObject obj =
+        new JSONObject(
+            FailureRecord.toJson(
+                "T", FailureRecord.OPERATION_GENERATION, null, new RuntimeException("e")));
     assertThat(obj.getString("operation")).isEqualTo("GENERATION");
   }
 }

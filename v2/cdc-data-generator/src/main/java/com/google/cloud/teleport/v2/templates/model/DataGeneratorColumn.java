@@ -32,11 +32,14 @@ public abstract class DataGeneratorColumn implements Serializable {
   /** Whether the column is nullable. */
   public abstract boolean isNullable();
 
-  /** Whether the column is skipped. */
-  public abstract boolean isSkipped();
+  /** Whether the column is a primary key. */
+  public abstract boolean isPrimaryKey();
 
   /** Whether the column is a generated column. */
   public abstract boolean isGenerated();
+
+  /** The original type string from the source (e.g., "VARCHAR(255)", "INT64"). */
+  public abstract String originalType();
 
   /** The size/length of the column (e.g., for strings or bytes). */
   @Nullable
@@ -50,12 +53,26 @@ public abstract class DataGeneratorColumn implements Serializable {
   @Nullable
   public abstract Integer scale();
 
-  // TODO: Add fields for generation rule configuration here once data config is
-  // supported.
+  /** The allowed values for ENUM type. */
+  @Nullable
+  public abstract java.util.List<String> enumValues();
+
+  /** The element type for ARRAY type. */
+  @Nullable
+  public abstract LogicalType elementType();
+
+  /** The custom generator for this column (e.g., Faker expression). */
+  @Nullable
+  public abstract String generator();
+
+  /** Whether to skip data generation for this column. */
+  public abstract boolean skip();
 
   public static Builder builder() {
-    return new AutoValue_DataGeneratorColumn.Builder().isSkipped(false);
+    return new AutoValue_DataGeneratorColumn.Builder().skip(false);
   }
+
+  public abstract Builder toBuilder();
 
   @AutoValue.Builder
   public abstract static class Builder {
@@ -65,15 +82,25 @@ public abstract class DataGeneratorColumn implements Serializable {
 
     public abstract Builder isNullable(boolean isNullable);
 
-    public abstract Builder isSkipped(boolean isSkipped);
+    public abstract Builder isPrimaryKey(boolean isPrimaryKey);
 
     public abstract Builder isGenerated(boolean isGenerated);
+
+    public abstract Builder originalType(String originalType);
 
     public abstract Builder size(Long size);
 
     public abstract Builder precision(Integer precision);
 
     public abstract Builder scale(Integer scale);
+
+    public abstract Builder enumValues(java.util.List<String> enumValues);
+
+    public abstract Builder elementType(LogicalType elementType);
+
+    public abstract Builder generator(String generator);
+
+    public abstract Builder skip(boolean skip);
 
     public abstract DataGeneratorColumn build();
   }

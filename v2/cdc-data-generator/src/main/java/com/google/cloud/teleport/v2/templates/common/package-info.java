@@ -14,6 +14,6 @@
  * the License.
  */
 
-/** Data model definitions for Data Generator template. */
+/** Common definitions and utilities for Data Generator template. */
 @javax.annotation.ParametersAreNonnullByDefault
-package com.google.cloud.teleport.v2.templates.model;
+package com.google.cloud.teleport.v2.templates.common;

@@ -104,6 +104,8 @@ public class MySqlDataWriterTest {
         DataGeneratorColumn.builder()
             .name("id")
             .logicalType(LogicalType.INT64)
+            .isPrimaryKey(true)
+            .originalType("INT64")
             .isNullable(false)
             .isGenerated(false)
             .size(null)
@@ -114,6 +116,8 @@ public class MySqlDataWriterTest {
         DataGeneratorColumn.builder()
             .name("name")
             .logicalType(LogicalType.STRING)
+            .isPrimaryKey(false)
+            .originalType("VARCHAR")
             .isNullable(true)
             .isGenerated(false)
             .size(128L)
@@ -141,6 +145,8 @@ public class MySqlDataWriterTest {
           DataGeneratorColumn.builder()
               .name(t.name().toLowerCase() + "_col")
               .logicalType(t)
+              .isPrimaryKey(t == LogicalType.INT64)
+              .originalType(t.name())
               .isNullable(true)
               .isGenerated(false)
               .size(null)
@@ -153,6 +159,8 @@ public class MySqlDataWriterTest {
         DataGeneratorColumn.builder()
             .name("generated_col")
             .logicalType(LogicalType.STRING)
+            .isPrimaryKey(false)
+            .originalType("VARCHAR")
             .isNullable(true)
             .isGenerated(true)
             .size(null)
@@ -163,9 +171,11 @@ public class MySqlDataWriterTest {
         DataGeneratorColumn.builder()
             .name("skipped_col")
             .logicalType(LogicalType.STRING)
+            .isPrimaryKey(false)
+            .originalType("VARCHAR")
             .isNullable(true)
             .isGenerated(false)
-            .isSkipped(true)
+            .skip(true)
             .size(null)
             .precision(null)
             .scale(null)
@@ -216,6 +226,8 @@ public class MySqlDataWriterTest {
         DataGeneratorColumn.builder()
             .name("age")
             .logicalType(LogicalType.INT64)
+            .isPrimaryKey(false)
+            .originalType("INT64")
             .isNullable(true)
             .isGenerated(false)
             .size(null)
@@ -249,6 +261,8 @@ public class MySqlDataWriterTest {
         DataGeneratorColumn.builder()
             .name("weird`col")
             .logicalType(LogicalType.STRING)
+            .isPrimaryKey(true)
+            .originalType("VARCHAR")
             .isNullable(true)
             .isGenerated(false)
             .size(null)
@@ -272,6 +286,8 @@ public class MySqlDataWriterTest {
         DataGeneratorColumn.builder()
             .name("g")
             .logicalType(LogicalType.STRING)
+            .isPrimaryKey(false)
+            .originalType("VARCHAR")
             .isNullable(true)
             .isGenerated(true)
             .size(null)
@@ -540,6 +556,8 @@ public class MySqlDataWriterTest {
     return DataGeneratorColumn.builder()
         .name(name)
         .logicalType(type)
+        .isPrimaryKey(false)
+        .originalType(type.name())
         .isNullable(true)
         .isGenerated(false)
         .size(null)
@@ -688,7 +706,11 @@ public class MySqlDataWriterTest {
       Types.DATE,
       Types.TIMESTAMP,
       Types.NUMERIC,
-      Types.VARCHAR
+      Types.VARCHAR,
+      Types.OTHER,
+      Types.OTHER,
+      Types.OTHER,
+      Types.OTHER
     };
     LogicalType[] types = LogicalType.values();
     // There are exactly as many expectedJdbc entries as there are LogicalType values.

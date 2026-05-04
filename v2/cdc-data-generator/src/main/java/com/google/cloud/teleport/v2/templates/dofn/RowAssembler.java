@@ -123,7 +123,7 @@ final class RowAssembler {
     Set<String> uniqueColumns = new HashSet<>();
     if (table.uniqueKeys() != null) {
       for (DataGeneratorUniqueKey uk : table.uniqueKeys()) {
-        uniqueColumns.addAll(uk.columns());
+        uniqueColumns.addAll(uk.keyColumns());
       }
     }
     return uniqueColumns;
@@ -160,7 +160,7 @@ final class RowAssembler {
     Set<String> uniqueColumns = uniqueColumnNames(table);
 
     for (DataGeneratorColumn col : table.columns()) {
-      if (col.isSkipped()) {
+      if (col.skip()) {
         continue;
       }
       schemaBuilder.addField(
@@ -194,14 +194,13 @@ final class RowAssembler {
    * Builds a row for a DELETE event. Only the primary-key columns carry values; everything else is
    * a nullable {@code null}. {@code isSkipped()} columns are omitted entirely.
    */
-  static Row generateDeleteRow(
-      LinkedHashMap<String, Object> pkValues, DataGeneratorTable table) {
+  static Row generateDeleteRow(LinkedHashMap<String, Object> pkValues, DataGeneratorTable table) {
     Schema.Builder schemaBuilder = Schema.builder();
     List<Object> values = new ArrayList<>();
     Set<String> pkSet = new HashSet<>(table.primaryKeys());
 
     for (DataGeneratorColumn col : table.columns()) {
-      if (col.isSkipped()) {
+      if (col.skip()) {
         continue;
       }
       Schema.FieldType fieldType = DataGeneratorUtils.mapToBeamFieldType(col.logicalType());
@@ -217,8 +216,8 @@ final class RowAssembler {
   }
 
   /**
-   * Captures only the columns a future UPDATE/DELETE follow-up will need: PK + FK + unique
-   * columns, plus the synthetic shard id when present. {@code isSkipped()} columns are omitted.
+   * Captures only the columns a future UPDATE/DELETE follow-up will need: PK + FK + unique columns,
+   * plus the synthetic shard id when present. {@code isSkipped()} columns are omitted.
    */
   static Row createReducedRow(Row fullRow, DataGeneratorTable table) {
     Schema.Builder schemaBuilder = Schema.builder();
@@ -228,7 +227,7 @@ final class RowAssembler {
     Set<String> uniqueColumns = uniqueColumnNames(table);
 
     for (DataGeneratorColumn col : table.columns()) {
-      if (col.isSkipped()) {
+      if (col.skip()) {
         continue;
       }
       if (pkSet.contains(col.name())
@@ -258,7 +257,7 @@ final class RowAssembler {
       DataGeneratorTable table, Row partialRow, String shardIdHint, Faker faker) {
     boolean hasAllColumns = true;
     for (DataGeneratorColumn col : table.columns()) {
-      if (col.isSkipped()) {
+      if (col.skip()) {
         continue;
       }
       if (!partialRow.getSchema().hasField(col.name())) {
@@ -278,7 +277,7 @@ final class RowAssembler {
     Schema.Builder schemaBuilder = Schema.builder();
     List<Object> values = new ArrayList<>();
     for (DataGeneratorColumn col : table.columns()) {
-      if (col.isSkipped()) {
+      if (col.skip()) {
         continue;
       }
       Object val = currentValues.get(col.name());

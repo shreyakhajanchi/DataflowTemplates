@@ -50,11 +50,10 @@ public class RowAssemblerTest {
   public void pkValuesOf_extractsInDeclaredOrder() {
     DataGeneratorTable table =
         baseTable("Users", ImmutableList.of("a", "b"))
-            .columns(
-                ImmutableList.of(
-                    intColumn("a"), intColumn("b"), intColumn("c")))
+            .columns(ImmutableList.of(intColumn("a"), intColumn("b"), intColumn("c")))
             .build();
-    Schema rowSchema = Schema.builder().addInt64Field("a").addInt64Field("b").addInt64Field("c").build();
+    Schema rowSchema =
+        Schema.builder().addInt64Field("a").addInt64Field("b").addInt64Field("c").build();
     Row row = Row.withSchema(rowSchema).addValues(1L, 2L, 3L).build();
 
     LinkedHashMap<String, Object> pk = RowAssembler.pkValuesOf(row, table);
@@ -79,9 +78,7 @@ public class RowAssemblerTest {
   @Test
   public void pkValuesOf_emptyWhenNoPkOnTable() {
     DataGeneratorTable table =
-        baseTable("Users", ImmutableList.of())
-            .columns(ImmutableList.of(intColumn("a")))
-            .build();
+        baseTable("Users", ImmutableList.of()).columns(ImmutableList.of(intColumn("a"))).build();
     Schema rowSchema = Schema.builder().addInt64Field("a").build();
     Row row = Row.withSchema(rowSchema).addValue(1L).build();
 
@@ -147,11 +144,11 @@ public class RowAssemblerTest {
   @Test
   public void uniqueColumnNames_aggregatesAcrossUniqueKeys() {
     DataGeneratorUniqueKey uk1 =
-        DataGeneratorUniqueKey.builder().name("uk1").columns(ImmutableList.of("email")).build();
+        DataGeneratorUniqueKey.builder().name("uk1").keyColumns(ImmutableList.of("email")).build();
     DataGeneratorUniqueKey uk2 =
         DataGeneratorUniqueKey.builder()
             .name("uk2")
-            .columns(ImmutableList.of("phone", "country"))
+            .keyColumns(ImmutableList.of("phone", "country"))
             .build();
     DataGeneratorTable table =
         baseTable("Users", ImmutableList.of("id"))
@@ -204,14 +201,12 @@ public class RowAssemblerTest {
   public void generateUpdateRow_pkPreservedFromArgument() {
     DataGeneratorTable table =
         baseTable("T", ImmutableList.of("id"))
-            .columns(
-                ImmutableList.of(
-                    intColumn("id"), stringColumn("name", false)))
+            .columns(ImmutableList.of(intColumn("id"), stringColumn("name", false)))
             .build();
     LinkedHashMap<String, Object> pk = new LinkedHashMap<>();
     pk.put("id", 99L);
     Row update = RowAssembler.generateUpdateRow(pk, table, /* originalRow= */ null, faker);
-    assertThat(update.getValue("id")).isEqualTo(99L);
+    assertThat((Long) update.getValue("id")).isEqualTo(99L);
     assertThat(update.getString("name")).isNotEmpty();
   }
 
@@ -221,8 +216,10 @@ public class RowAssemblerTest {
         DataGeneratorColumn.builder()
             .name("ghost")
             .logicalType(LogicalType.STRING)
+            .isPrimaryKey(false)
+            .originalType("VARCHAR")
             .isNullable(true)
-            .isSkipped(true)
+            .skip(true)
             .isGenerated(false)
             .size(null)
             .precision(null)
@@ -242,7 +239,7 @@ public class RowAssemblerTest {
   @Test
   public void generateUpdateRow_uniqueColumnsPreservedFromOriginal() {
     DataGeneratorUniqueKey uk =
-        DataGeneratorUniqueKey.builder().name("uk").columns(ImmutableList.of("email")).build();
+        DataGeneratorUniqueKey.builder().name("uk").keyColumns(ImmutableList.of("email")).build();
     DataGeneratorTable table =
         baseTable("T", ImmutableList.of("id"))
             .columns(ImmutableList.of(intColumn("id"), stringColumn("email", false)))
@@ -278,7 +275,7 @@ public class RowAssemblerTest {
     LinkedHashMap<String, Object> pk = new LinkedHashMap<>();
     pk.put("id", 7L);
     Row update = RowAssembler.generateUpdateRow(pk, table, original, faker);
-    assertThat(update.getValue("parent_id")).isEqualTo(42L);
+    assertThat((Long) update.getValue("parent_id")).isEqualTo(42L);
   }
 
   // ===========================================================================
@@ -289,14 +286,13 @@ public class RowAssemblerTest {
   public void generateDeleteRow_pkSetAndOtherColsNull() {
     DataGeneratorTable table =
         baseTable("T", ImmutableList.of("id"))
-            .columns(
-                ImmutableList.of(intColumn("id"), stringColumn("name", true)))
+            .columns(ImmutableList.of(intColumn("id"), stringColumn("name", true)))
             .build();
     LinkedHashMap<String, Object> pk = new LinkedHashMap<>();
     pk.put("id", 5L);
     Row del = RowAssembler.generateDeleteRow(pk, table);
-    assertThat(del.getValue("id")).isEqualTo(5L);
-    assertThat(del.getValue("name")).isNull();
+    assertThat((Long) del.getValue("id")).isEqualTo(5L);
+    assertThat((Object) del.getValue("name")).isNull();
   }
 
   @Test
@@ -305,8 +301,10 @@ public class RowAssemblerTest {
         DataGeneratorColumn.builder()
             .name("ghost")
             .logicalType(LogicalType.STRING)
+            .isPrimaryKey(false)
+            .originalType("VARCHAR")
             .isNullable(true)
-            .isSkipped(true)
+            .skip(true)
             .isGenerated(false)
             .size(null)
             .precision(null)
@@ -336,7 +334,7 @@ public class RowAssemblerTest {
             .referencedColumns(ImmutableList.of("id"))
             .build();
     DataGeneratorUniqueKey uk =
-        DataGeneratorUniqueKey.builder().name("uk").columns(ImmutableList.of("email")).build();
+        DataGeneratorUniqueKey.builder().name("uk").keyColumns(ImmutableList.of("email")).build();
     DataGeneratorTable table =
         baseTable("Users", ImmutableList.of("id"))
             .columns(
@@ -356,10 +354,7 @@ public class RowAssemblerTest {
             .addStringField("name")
             .addStringField(Constants.SHARD_ID_COLUMN_NAME)
             .build();
-    Row full =
-        Row.withSchema(fullSchema)
-            .addValues(1L, 99L, "x@y", "Alice", "shardA")
-            .build();
+    Row full = Row.withSchema(fullSchema).addValues(1L, 99L, "x@y", "Alice", "shardA").build();
 
     Row reduced = RowAssembler.createReducedRow(full, table);
     assertThat(reduced.getSchema().getFieldNames())
@@ -394,7 +389,7 @@ public class RowAssemblerTest {
     Schema schema = Schema.builder().addInt64Field("id").addStringField("name").build();
     Row complete = Row.withSchema(schema).addValues(1L, "Alice").build();
     Row result = RowAssembler.completeRow(table, complete, /* shardIdHint= */ "", faker);
-    assertThat(result.getValue("id")).isEqualTo(1L);
+    assertThat((Long) result.getValue("id")).isEqualTo(1L);
     assertThat(result.getString("name")).isEqualTo("Alice");
   }
 
@@ -407,7 +402,7 @@ public class RowAssemblerTest {
     Schema partialSchema = Schema.builder().addInt64Field("id").build();
     Row partial = Row.withSchema(partialSchema).addValue(7L).build();
     Row full = RowAssembler.completeRow(table, partial, "", faker);
-    assertThat(full.getValue("id")).isEqualTo(7L);
+    assertThat((Long) full.getValue("id")).isEqualTo(7L);
     assertThat(full.getString("name")).isNotNull();
   }
 
@@ -430,8 +425,10 @@ public class RowAssemblerTest {
         DataGeneratorColumn.builder()
             .name("ghost")
             .logicalType(LogicalType.STRING)
+            .isPrimaryKey(false)
+            .originalType("VARCHAR")
             .isNullable(true)
-            .isSkipped(true)
+            .skip(true)
             .isGenerated(false)
             .size(null)
             .precision(null)
@@ -469,8 +466,10 @@ public class RowAssemblerTest {
     return DataGeneratorColumn.builder()
         .name(name)
         .logicalType(LogicalType.INT64)
+        .isPrimaryKey(false)
+        .originalType("INT64")
         .isNullable(false)
-        .isSkipped(false)
+        .skip(false)
         .isGenerated(false)
         .size(null)
         .precision(null)
@@ -482,13 +481,14 @@ public class RowAssemblerTest {
     return DataGeneratorColumn.builder()
         .name(name)
         .logicalType(LogicalType.STRING)
+        .isPrimaryKey(false)
+        .originalType("VARCHAR")
         .isNullable(nullable)
-        .isSkipped(false)
+        .skip(false)
         .isGenerated(false)
         .size(20L)
         .precision(null)
         .scale(null)
         .build();
   }
-
 }

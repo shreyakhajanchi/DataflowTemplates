@@ -299,7 +299,7 @@ public class MySqlDataWriter implements DataWriter {
   private static List<DataGeneratorColumn> writableColumns(DataGeneratorTable table) {
     ImmutableList.Builder<DataGeneratorColumn> builder = ImmutableList.builder();
     for (DataGeneratorColumn col : table.columns()) {
-      if (col.isSkipped() || col.isGenerated()) {
+      if (col.skip() || col.isGenerated()) {
         continue;
       }
       builder.add(col);

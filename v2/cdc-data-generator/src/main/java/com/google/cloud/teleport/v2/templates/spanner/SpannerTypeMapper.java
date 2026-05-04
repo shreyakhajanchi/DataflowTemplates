@@ -16,25 +16,17 @@
 package com.google.cloud.teleport.v2.templates.spanner;
 
 import com.google.cloud.spanner.Dialect;
+import com.google.cloud.teleport.v2.templates.common.TypeMapper;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
-import com.google.cloud.teleport.v2.templates.sink.TypeMapper;
 import java.util.Locale;
-import javax.annotation.Nullable;
 
 /** TypeMapper implementation for Spanner types. */
 public class SpannerTypeMapper implements TypeMapper {
 
   @Override
-  public LogicalType getLogicalType(
-      String typeName, @Nullable Object dialectObj, @Nullable Long size) {
-    if (!(dialectObj instanceof Dialect)) {
-      throw new IllegalArgumentException(
-          "Expected com.google.cloud.spanner.Dialect, got "
-              + (dialectObj != null ? dialectObj.getClass().getName() : "null"));
-    }
-    Dialect dialect = (Dialect) dialectObj;
+  public LogicalType getLogicalType(String typeName, Dialect dialect) {
     if (typeName == null) {
-      throw new IllegalArgumentException("Type name cannot be null");
+      return LogicalType.STRING;
     }
 
     String upperType = typeName.toUpperCase(Locale.ROOT).trim();
@@ -71,7 +63,10 @@ public class SpannerTypeMapper implements TypeMapper {
           return LogicalType.NUMERIC;
         case "JSON":
           return LogicalType.JSON;
-          // Todo: Add support for array datatype
+        case "ARRAY":
+          return LogicalType.ARRAY;
+        case "STRUCT":
+          return LogicalType.STRUCT;
         default:
           return LogicalType.STRING;
       }

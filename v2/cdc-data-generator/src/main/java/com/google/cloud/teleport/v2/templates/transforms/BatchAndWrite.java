@@ -15,7 +15,7 @@
  */
 package com.google.cloud.teleport.v2.templates.transforms;
 
-import com.google.cloud.teleport.v2.templates.CdcDataGeneratorOptions.SinkType;
+import com.google.cloud.teleport.v2.templates.DataGeneratorOptions.SinkType;
 import com.google.cloud.teleport.v2.templates.dofn.BatchAndWriteFn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.utils.FailureRecord;
@@ -34,8 +34,8 @@ import org.apache.beam.sdk.values.Row;
  *
  * <p>Output is a {@code PCollection<String>} of JSON-encoded {@link FailureRecord}s — one per row
  * that could not be generated or that the sink rejected. Callers should pipe this output to a DLQ
- * sink (e.g. {@code WriteFailuresToGcs}) when a dead-letter directory is configured. The output
- * is empty when no failures occur.
+ * sink (e.g. {@code WriteFailuresToGcs}) when a dead-letter directory is configured. The output is
+ * empty when no failures occur.
  *
  * <p>The actual work is delegated to {@link BatchAndWriteFn}; this transform exists so callers can
  * apply one named PTransform without having to wire up the {@link ParDo} and side input.
@@ -45,6 +45,9 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PCol
   private final SinkType sinkType;
   private final String sinkOptionsPath;
   private final Integer batchSize;
+  private final Integer jdbcPoolSize;
+  private final Integer updateInterval;
+  private final Integer deleteInterval;
   private final PCollectionView<DataGeneratorSchema> schemaView;
 
   /**
@@ -52,16 +55,25 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PCol
    * @param sinkOptionsPath path/URI to the sink-specific configuration document
    * @param batchSize maximum rows buffered per {@code (table, shard, op)} before flush; {@code
    *     null} or non-positive falls back to {@link BatchAndWriteFn#DEFAULT_BATCH_SIZE}
+   * @param jdbcPoolSize connection pool size limit per MySQL shard node
+   * @param updateInterval custom UPDATE interval in seconds for lifecycle events
+   * @param deleteInterval custom trailing DELETE interval in seconds for lifecycle events
    * @param schemaView side input carrying the {@link DataGeneratorSchema}
    */
   public BatchAndWrite(
       SinkType sinkType,
       String sinkOptionsPath,
       Integer batchSize,
+      Integer jdbcPoolSize,
+      Integer updateInterval,
+      Integer deleteInterval,
       PCollectionView<DataGeneratorSchema> schemaView) {
     this.sinkType = sinkType;
     this.sinkOptionsPath = sinkOptionsPath;
     this.batchSize = batchSize;
+    this.jdbcPoolSize = jdbcPoolSize;
+    this.updateInterval = updateInterval;
+    this.deleteInterval = deleteInterval;
     this.schemaView = schemaView;
   }
 
@@ -70,7 +82,15 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PCol
     return input
         .apply(
             "BatchAndWriteFn",
-            ParDo.of(new BatchAndWriteFn(sinkType, sinkOptionsPath, batchSize, schemaView))
+            ParDo.of(
+                    new BatchAndWriteFn(
+                        sinkType,
+                        sinkOptionsPath,
+                        batchSize,
+                        jdbcPoolSize,
+                        updateInterval,
+                        deleteInterval,
+                        schemaView))
                 .withSideInputs(schemaView))
         .setCoder(StringUtf8Coder.of());
   }

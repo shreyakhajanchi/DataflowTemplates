@@ -44,9 +44,6 @@ public class SchemaUtilsTest {
             .insertQps(10)
             .isRoot(false) // Default false, should be set to true
             .childTables(ImmutableList.of())
-            .updateQps(0)
-            .deleteQps(0)
-            .recordsPerTick(1.0)
             .build();
 
     DataGeneratorTable child =
@@ -66,9 +63,6 @@ public class SchemaUtilsTest {
             .insertQps(10)
             .isRoot(true) // Should be set to false
             .childTables(ImmutableList.of())
-            .updateQps(0)
-            .deleteQps(0)
-            .recordsPerTick(1.0)
             .build();
 
     DataGeneratorSchema schema =
@@ -100,9 +94,6 @@ public class SchemaUtilsTest {
             .uniqueKeys(ImmutableList.of())
             .insertQps(10)
             .isRoot(false)
-            .updateQps(0)
-            .deleteQps(0)
-            .recordsPerTick(1.0)
             .build();
 
     DataGeneratorTable p2 =
@@ -114,9 +105,6 @@ public class SchemaUtilsTest {
             .uniqueKeys(ImmutableList.of())
             .insertQps(100)
             .isRoot(false)
-            .updateQps(0)
-            .deleteQps(0)
-            .recordsPerTick(1.0)
             .build();
 
     DataGeneratorTable child =
@@ -141,9 +129,6 @@ public class SchemaUtilsTest {
             .uniqueKeys(ImmutableList.of())
             .insertQps(200)
             .isRoot(false)
-            .updateQps(0)
-            .deleteQps(0)
-            .recordsPerTick(1.0)
             .build();
 
     DataGeneratorSchema schema =
@@ -176,6 +161,7 @@ public class SchemaUtilsTest {
   public void testDAGConstructionInterleaving() {
     // InterleavedParent -> Child (interleaved)
     // OtherParent (1 QPS) -> Child (FK)
+    // Interleaving should take precedence.
 
     DataGeneratorTable interleavedParent =
         DataGeneratorTable.builder()
@@ -185,10 +171,6 @@ public class SchemaUtilsTest {
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(false)
-            .updateQps(0)
-            .deleteQps(0)
-            .recordsPerTick(1.0)
             .build();
     DataGeneratorTable otherParent =
         DataGeneratorTable.builder()
@@ -198,10 +180,6 @@ public class SchemaUtilsTest {
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(false)
-            .updateQps(0)
-            .deleteQps(0)
-            .recordsPerTick(1.0)
             .build();
 
     DataGeneratorTable child =
@@ -220,10 +198,6 @@ public class SchemaUtilsTest {
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(false)
-            .updateQps(0)
-            .deleteQps(0)
-            .recordsPerTick(1.0)
             .build();
 
     DataGeneratorSchema schema =
@@ -246,7 +220,6 @@ public class SchemaUtilsTest {
 
     assertEquals(1, dagSchema.tables().get("OtherParent").childTables().size());
     assertEquals("InterleavedParent", dagSchema.tables().get("OtherParent").childTables().get(0));
-
     assertEquals(1, dagSchema.tables().get("InterleavedParent").childTables().size());
     assertEquals("Child", dagSchema.tables().get("InterleavedParent").childTables().get(0));
   }
@@ -266,10 +239,6 @@ public class SchemaUtilsTest {
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(false)
-            .updateQps(0)
-            .deleteQps(0)
-            .recordsPerTick(1.0)
             .build();
     DataGeneratorTable p2 =
         DataGeneratorTable.builder()
@@ -279,10 +248,6 @@ public class SchemaUtilsTest {
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(false)
-            .updateQps(0)
-            .deleteQps(0)
-            .recordsPerTick(1.0)
             .build();
     DataGeneratorTable c1 =
         DataGeneratorTable.builder()
@@ -305,10 +270,6 @@ public class SchemaUtilsTest {
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(false)
-            .updateQps(0)
-            .deleteQps(0)
-            .recordsPerTick(1.0)
             .build();
     DataGeneratorTable c2 =
         DataGeneratorTable.builder()
@@ -325,10 +286,6 @@ public class SchemaUtilsTest {
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(false)
-            .updateQps(0)
-            .deleteQps(0)
-            .recordsPerTick(1.0)
             .build();
     DataGeneratorTable gc1 =
         DataGeneratorTable.builder()
@@ -345,10 +302,6 @@ public class SchemaUtilsTest {
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(false)
-            .updateQps(0)
-            .deleteQps(0)
-            .recordsPerTick(1.0)
             .build();
 
     DataGeneratorSchema schema =
@@ -375,5 +328,94 @@ public class SchemaUtilsTest {
     assertEquals("GC1", dagSchema.tables().get("C1").childTables().get(0));
     assertEquals(0, dagSchema.tables().get("C2").childTables().size());
     assertEquals(0, dagSchema.tables().get("GC1").childTables().size());
+  }
+
+  @Test
+  public void testDAGConstructionDependentParents() {
+    // Departments (200 QPS) <- EmployeeAssignments (100 QPS)
+    // Projects (50 QPS) -> both
+    // Physical FK: EmployeeAssignments -> Departments
+    // Old logic would chain: EmployeeAssignments -> Departments (because 100 < 200)
+    // New logic should chain: Departments -> EmployeeAssignments (because of FK)
+
+    DataGeneratorTable departments =
+        DataGeneratorTable.builder()
+            .name("Departments")
+            .insertQps(200)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .build();
+
+    DataGeneratorTable employees =
+        DataGeneratorTable.builder()
+            .name("EmployeeAssignments")
+            .insertQps(100)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(
+                ImmutableList.of(
+                    DataGeneratorForeignKey.builder()
+                        .name("fk_emp_dept")
+                        .keyColumns(ImmutableList.of("DeptCode"))
+                        .referencedTable("Departments")
+                        .referencedColumns(ImmutableList.of("DeptCode"))
+                        .build()))
+            .uniqueKeys(ImmutableList.of())
+            .build();
+
+    DataGeneratorTable projects =
+        DataGeneratorTable.builder()
+            .name("Projects")
+            .insertQps(50)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(
+                ImmutableList.of(
+                    DataGeneratorForeignKey.builder()
+                        .name("fk_proj_dept")
+                        .keyColumns(ImmutableList.of("DeptCode"))
+                        .referencedTable("Departments")
+                        .referencedColumns(ImmutableList.of("DeptCode"))
+                        .build(),
+                    DataGeneratorForeignKey.builder()
+                        .name("fk_proj_emp")
+                        .keyColumns(ImmutableList.of("EmpId"))
+                        .referencedTable("EmployeeAssignments")
+                        .referencedColumns(ImmutableList.of("EmpId"))
+                        .build()))
+            .uniqueKeys(ImmutableList.of())
+            .build();
+
+    DataGeneratorSchema schema =
+        DataGeneratorSchema.builder()
+            .tables(
+                ImmutableMap.of(
+                    "Departments",
+                    departments,
+                    "EmployeeAssignments",
+                    employees,
+                    "Projects",
+                    projects))
+            .build();
+
+    DataGeneratorSchema dagSchema = SchemaUtils.setSchemaDAG(schema);
+
+    DataGeneratorTable newDept = dagSchema.tables().get("Departments");
+    DataGeneratorTable newEmp = dagSchema.tables().get("EmployeeAssignments");
+    DataGeneratorTable newProj = dagSchema.tables().get("Projects");
+
+    assertTrue(newDept.isRoot()); // Departments should be root!
+    assertFalse(newEmp.isRoot());
+    assertFalse(newProj.isRoot());
+
+    // Departments should have EmployeeAssignments as child
+    assertEquals(1, newDept.childTables().size());
+    assertEquals("EmployeeAssignments", newDept.childTables().get(0));
+
+    // EmployeeAssignments should have Projects as child
+    assertEquals(1, newEmp.childTables().size());
+    assertEquals("Projects", newEmp.childTables().get(0));
   }
 }

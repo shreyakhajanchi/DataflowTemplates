@@ -201,7 +201,7 @@ public class SpannerDataWriter implements DataWriter {
     // (for UPDATE). DELETE is handled above.
     Mutation.WriteBuilder builder = Mutation.newInsertOrUpdateBuilder(table.name());
     for (DataGeneratorColumn col : table.columns()) {
-      if (col.isSkipped() || col.isGenerated()) {
+      if (col.skip() || col.isGenerated()) {
         continue;
       }
       Object val = fetchFromRow(row, col.name());

@@ -17,7 +17,7 @@ package com.google.cloud.teleport.v2.templates.dofn;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.google.cloud.teleport.v2.templates.CdcDataGeneratorOptions.SinkType;
+import com.google.cloud.teleport.v2.templates.DataGeneratorOptions.SinkType;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
@@ -68,9 +68,7 @@ public class BatchAndWriteFnTest implements Serializable {
   @Test
   public void buildInsertTopoOrder_rootsBeforeChildren() {
     DataGeneratorTable parent =
-        tableBuilder("Parent", /* isRoot= */ true)
-            .childTables(ImmutableList.of("Child"))
-            .build();
+        tableBuilder("Parent", /* isRoot= */ true).childTables(ImmutableList.of("Child")).build();
     DataGeneratorTable child = tableBuilder("Child", /* isRoot= */ false).build();
 
     DataGeneratorSchema schema =
@@ -114,6 +112,7 @@ public class BatchAndWriteFnTest implements Serializable {
   @Test
   public void buildInsertTopoOrder_emptySchema_returnsEmpty() {
     DataGeneratorSchema schema = DataGeneratorSchema.builder().tables(ImmutableMap.of()).build();
+
     assertThat(BatchAndWriteFn.buildInsertTopoOrder(schema)).isEmpty();
   }
 
@@ -123,14 +122,14 @@ public class BatchAndWriteFnTest implements Serializable {
 
   @Test
   public void constructor_nullBatchSize_fallsBackToDefault() {
-    BatchAndWriteFn fn = new BatchAndWriteFn(SinkType.SPANNER, "{}", null, schemaSideInput());
+    BatchAndWriteFn fn = new BatchAndWriteFn(SinkType.SPANNER, "{}", null, null);
     assertThat(BatchAndWriteFn.DEFAULT_BATCH_SIZE).isGreaterThan(0);
     assertThat(fn).isNotNull();
   }
 
   @Test
   public void constructor_nonPositiveBatchSize_fallsBackToDefault() {
-    BatchAndWriteFn fn = new BatchAndWriteFn(SinkType.SPANNER, "{}", 0, schemaSideInput());
+    BatchAndWriteFn fn = new BatchAndWriteFn(SinkType.SPANNER, "{}", 0, null);
     assertThat(fn).isNotNull();
   }
 
@@ -164,9 +163,9 @@ public class BatchAndWriteFnTest implements Serializable {
 
     pipeline.run().waitUntilFinish();
 
-    assertThat(RecordingDataWriter.insertCallCount.get()).isAtLeast(1);
-    assertThat(RecordingDataWriter.insertedRowCount.get()).isAtLeast(1);
-    assertThat(RecordingDataWriter.insertedTableNames).contains("Users");
+    assertThat(RecordingDataWriter.INSERT_CALL_COUNT.get()).isAtLeast(1);
+    assertThat(RecordingDataWriter.INSERTED_ROW_COUNT.get()).isAtLeast(1);
+    assertThat(RecordingDataWriter.INSERTED_TABLE_NAMES).contains("Users");
   }
 
   @Test
@@ -190,7 +189,7 @@ public class BatchAndWriteFnTest implements Serializable {
 
     pipeline.run().waitUntilFinish();
 
-    assertThat(RecordingDataWriter.insertCallCount.get()).isEqualTo(0);
+    assertThat(RecordingDataWriter.INSERT_CALL_COUNT.get()).isEqualTo(0);
   }
 
   // ===========================================================================
@@ -247,8 +246,7 @@ public class BatchAndWriteFnTest implements Serializable {
     PCollectionView<DataGeneratorSchema> schemaView =
         pipeline.apply("MkSchema", Create.of(schema)).apply("AsView", View.asSingleton());
 
-    Schema rowSchema =
-        Schema.builder().addInt64Field("id").addStringField("name").build();
+    Schema rowSchema = Schema.builder().addInt64Field("id").addStringField("name").build();
     Row userRow = Row.withSchema(rowSchema).addValues(1L, "Alice").build();
 
     pipeline
@@ -260,8 +258,8 @@ public class BatchAndWriteFnTest implements Serializable {
 
     pipeline.run().waitUntilFinish();
 
-    assertThat(RecordingDataWriter.insertedTableNames).containsAtLeast("Users", "Orders");
-    assertThat(RecordingDataWriter.insertCallCount.get()).isAtLeast(2);
+    assertThat(RecordingDataWriter.INSERTED_TABLE_NAMES).containsAtLeast("Users", "Orders");
+    assertThat(RecordingDataWriter.INSERT_CALL_COUNT.get()).isAtLeast(2);
   }
 
   // ===========================================================================
@@ -295,7 +293,7 @@ public class BatchAndWriteFnTest implements Serializable {
 
     pipeline.run().waitUntilFinish();
 
-    assertThat(FailingDataWriter.insertCallCount.get()).isAtLeast(1);
+    assertThat(FailingDataWriter.INSERT_CALL_COUNT.get()).isAtLeast(1);
   }
 
   // ===========================================================================
@@ -356,8 +354,7 @@ public class BatchAndWriteFnTest implements Serializable {
     PCollectionView<DataGeneratorSchema> schemaView =
         pipeline.apply("MkSchema", Create.of(schema)).apply("AsView", View.asSingleton());
 
-    Schema rowSchema =
-        Schema.builder().addInt64Field("id").addStringField("name").build();
+    Schema rowSchema = Schema.builder().addInt64Field("id").addStringField("name").build();
     Row parentRow = Row.withSchema(rowSchema).addValues(1L, "Alice").build();
 
     pipeline
@@ -369,8 +366,8 @@ public class BatchAndWriteFnTest implements Serializable {
 
     pipeline.run().waitUntilFinish();
 
-    assertThat(RecordingDataWriter.insertedTableNames).contains("Parent");
-    assertThat(RecordingDataWriter.insertedTableNames).doesNotContain("Child");
+    assertThat(RecordingDataWriter.INSERTED_TABLE_NAMES).contains("Parent");
+    assertThat(RecordingDataWriter.INSERTED_TABLE_NAMES).doesNotContain("Child");
   }
 
   // ===========================================================================
@@ -396,8 +393,10 @@ public class BatchAndWriteFnTest implements Serializable {
     return DataGeneratorColumn.builder()
         .name(name)
         .logicalType(LogicalType.INT64)
+        .isPrimaryKey(false)
+        .originalType("INT64")
         .isNullable(false)
-        .isSkipped(false)
+        .skip(false)
         .isGenerated(false)
         .size(null)
         .precision(null)
@@ -409,8 +408,10 @@ public class BatchAndWriteFnTest implements Serializable {
     return DataGeneratorColumn.builder()
         .name(name)
         .logicalType(LogicalType.STRING)
+        .isPrimaryKey(false)
+        .originalType("VARCHAR")
         .isNullable(nullable)
-        .isSkipped(false)
+        .skip(false)
         .isGenerated(false)
         .size(20L)
         .precision(null)
@@ -436,75 +437,76 @@ public class BatchAndWriteFnTest implements Serializable {
   /** Trivial side input used by constructor tests that never run the pipeline. */
   private PCollectionView<DataGeneratorSchema> schemaSideInput() {
     DataGeneratorSchema empty = DataGeneratorSchema.builder().tables(ImmutableMap.of()).build();
+
     return pipeline.apply("EmptySchema", Create.of(empty)).apply("AsView", View.asSingleton());
   }
 
   /**
-   * DataWriter that records call counts and the set of tables it received in static fields, so
-   * the test can assert against them after the pipeline finishes — avoids Mockito's serialization
+   * DataWriter that records call counts and the set of tables it received in static fields, so the
+   * test can assert against them after the pipeline finishes — avoids Mockito's serialization
    * pitfalls under DirectRunner.
    */
   static class RecordingDataWriter implements DataWriter, Serializable {
     private static final long serialVersionUID = 1L;
 
-    static final AtomicInteger insertCallCount = new AtomicInteger();
-    static final AtomicInteger insertedRowCount = new AtomicInteger();
-    static final AtomicInteger updateCallCount = new AtomicInteger();
-    static final AtomicInteger deleteCallCount = new AtomicInteger();
-    static final AtomicInteger closeCallCount = new AtomicInteger();
-    static final Set<String> insertedTableNames =
+    static final AtomicInteger INSERT_CALL_COUNT = new AtomicInteger();
+    static final AtomicInteger INSERTED_ROW_COUNT = new AtomicInteger();
+    static final AtomicInteger UPDATE_CALL_COUNT = new AtomicInteger();
+    static final AtomicInteger DELETE_CALL_COUNT = new AtomicInteger();
+    static final AtomicInteger CLOSE_CALL_COUNT = new AtomicInteger();
+    static final Set<String> INSERTED_TABLE_NAMES =
         Collections.newSetFromMap(new ConcurrentHashMap<>());
 
     static void reset() {
-      insertCallCount.set(0);
-      insertedRowCount.set(0);
-      updateCallCount.set(0);
-      deleteCallCount.set(0);
-      closeCallCount.set(0);
-      insertedTableNames.clear();
+      INSERT_CALL_COUNT.set(0);
+      INSERTED_ROW_COUNT.set(0);
+      UPDATE_CALL_COUNT.set(0);
+      DELETE_CALL_COUNT.set(0);
+      CLOSE_CALL_COUNT.set(0);
+      INSERTED_TABLE_NAMES.clear();
     }
 
     @Override
     public void insert(
         List<Row> rows, DataGeneratorTable table, String shardId, int maxShardConnections) {
-      insertCallCount.incrementAndGet();
-      insertedRowCount.addAndGet(rows == null ? 0 : rows.size());
+      INSERT_CALL_COUNT.incrementAndGet();
+      INSERTED_ROW_COUNT.addAndGet(rows == null ? 0 : rows.size());
       if (table != null) {
-        insertedTableNames.add(table.name());
+        INSERTED_TABLE_NAMES.add(table.name());
       }
     }
 
     @Override
     public void update(
         List<Row> rows, DataGeneratorTable table, String shardId, int maxShardConnections) {
-      updateCallCount.incrementAndGet();
+      UPDATE_CALL_COUNT.incrementAndGet();
     }
 
     @Override
     public void delete(
         List<Row> rows, DataGeneratorTable table, String shardId, int maxShardConnections) {
-      deleteCallCount.incrementAndGet();
+      DELETE_CALL_COUNT.incrementAndGet();
     }
 
     @Override
     public void close() {
-      closeCallCount.incrementAndGet();
+      CLOSE_CALL_COUNT.incrementAndGet();
     }
   }
 
   /** Writer that throws on every insert; used to drive the DLQ path. */
   static class FailingDataWriter implements DataWriter, Serializable {
     private static final long serialVersionUID = 1L;
-    static final AtomicInteger insertCallCount = new AtomicInteger();
+    static final AtomicInteger INSERT_CALL_COUNT = new AtomicInteger();
 
     static void reset() {
-      insertCallCount.set(0);
+      INSERT_CALL_COUNT.set(0);
     }
 
     @Override
     public void insert(
         List<Row> rows, DataGeneratorTable table, String shardId, int maxShardConnections) {
-      insertCallCount.incrementAndGet();
+      INSERT_CALL_COUNT.incrementAndGet();
       throw new RuntimeException("simulated sink failure");
     }
 

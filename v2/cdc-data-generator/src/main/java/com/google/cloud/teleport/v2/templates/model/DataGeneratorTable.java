@@ -19,9 +19,12 @@ import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
 import java.io.Serializable;
 import javax.annotation.Nullable;
+import org.apache.beam.sdk.coders.DefaultCoder;
+import org.apache.beam.sdk.coders.SerializableCoder;
 
 /** Represents a table in the data generator schema. */
 @AutoValue
+@DefaultCoder(SerializableCoder.class)
 public abstract class DataGeneratorTable implements Serializable {
 
   /** The name of the table. */
@@ -43,17 +46,37 @@ public abstract class DataGeneratorTable implements Serializable {
   /** Unique keys/indexes defined on this table. */
   public abstract ImmutableList<DataGeneratorUniqueKey> uniqueKeys();
 
-  /** Whether this table is a root table (not interleaved/child). */
-  public abstract boolean isRoot();
-
-  /** The QPS for inserts. */
+  /** The target Insert QPS for this table. */
   public abstract int insertQps();
 
-  /** The QPS for updates. */
-  public abstract int updateQps();
+  /**
+   * The target Update QPS for this table, or {@code null} to inherit the pipeline-global update
+   * QPS. An explicit {@code 0} means "never generate updates for this table" and must NOT be
+   * treated as "unset".
+   */
+  @Nullable
+  public abstract Integer updateQps();
 
-  /** The QPS for deletes. */
-  public abstract int deleteQps();
+  /**
+   * The target Delete QPS for this table, or {@code null} to inherit the pipeline-global delete
+   * QPS. An explicit {@code 0} means "never generate deletes for this table" and must NOT be
+   * treated as "unset".
+   */
+  @Nullable
+  public abstract Integer deleteQps();
+
+  /** Whether this table is a root table. */
+  public abstract boolean isRoot();
+
+  /** The list of child tables. */
+  public abstract ImmutableList<String> childTables();
+
+  /**
+   * Depth of this table in the parent→child DAG produced by {@code SchemaUtils.setSchemaDAG}. A
+   * root has depth {@code 0}; direct children have depth {@code 1}; grandchildren {@code 2}; etc.
+   * When a table has multiple ancestors, its depth is the longest chain length from any root.
+   */
+  public abstract int depth();
 
   /** The number of records to generate for this table for each record of the parent table. */
   public abstract double recordsPerTick();
@@ -62,15 +85,19 @@ public abstract class DataGeneratorTable implements Serializable {
   @Nullable
   public abstract String generatorParent();
 
-  /** The names of the tables that are children of this table in the generation hierarchy. */
-  @Nullable
-  public abstract ImmutableList<String> childTables();
+  public static Builder builder() {
+    return new AutoValue_DataGeneratorTable.Builder()
+        .insertQps(1)
+        .updateQps(null)
+        .deleteQps(null)
+        .isRoot(true)
+        .depth(0)
+        .childTables(ImmutableList.of())
+        .recordsPerTick(1.0)
+        .generatorParent(null);
+  }
 
   public abstract Builder toBuilder();
-
-  public static Builder builder() {
-    return new AutoValue_DataGeneratorTable.Builder();
-  }
 
   @AutoValue.Builder
   public abstract static class Builder {
@@ -86,19 +113,21 @@ public abstract class DataGeneratorTable implements Serializable {
 
     public abstract Builder uniqueKeys(ImmutableList<DataGeneratorUniqueKey> uniqueKeys);
 
-    public abstract Builder isRoot(boolean isRoot);
-
     public abstract Builder insertQps(int insertQps);
 
-    public abstract Builder updateQps(int updateQps);
+    public abstract Builder updateQps(@Nullable Integer updateQps);
 
-    public abstract Builder deleteQps(int deleteQps);
+    public abstract Builder deleteQps(@Nullable Integer deleteQps);
+
+    public abstract Builder isRoot(boolean isRoot);
+
+    public abstract Builder childTables(ImmutableList<String> childTables);
+
+    public abstract Builder depth(int depth);
 
     public abstract Builder recordsPerTick(double recordsPerTick);
 
     public abstract Builder generatorParent(@Nullable String generatorParent);
-
-    public abstract Builder childTables(ImmutableList<String> childTables);
 
     public abstract DataGeneratorTable build();
   }

@@ -15,15 +15,11 @@
  */
 package com.google.cloud.teleport.v2.templates.dofn;
 
-import com.google.cloud.teleport.v2.templates.CdcDataGeneratorOptions.SinkType;
+import com.google.cloud.teleport.v2.templates.DataGeneratorOptions.SinkType;
+import com.google.cloud.teleport.v2.templates.common.SinkSchemaFetcher;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
-import com.google.cloud.teleport.v2.templates.mysql.MySqlSchemaFetcher;
-import com.google.cloud.teleport.v2.templates.sink.SinkSchemaFetcher;
-import com.google.cloud.teleport.v2.templates.spanner.SpannerSchemaFetcher;
-import com.google.common.collect.ImmutableMap;
+import com.google.cloud.teleport.v2.templates.transforms.SchemaLoader;
 import java.io.IOException;
-import java.util.Map;
-import java.util.function.Supplier;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,38 +28,35 @@ import org.slf4j.LoggerFactory;
 public class FetchSchemaFn extends DoFn<SinkType, DataGeneratorSchema> {
   private static final Logger LOG = LoggerFactory.getLogger(FetchSchemaFn.class);
 
-  private static final Map<SinkType, Supplier<SinkSchemaFetcher>> fetcherProviders =
-      ImmutableMap.of(
-          SinkType.SPANNER, SpannerSchemaFetcher::new,
-          SinkType.MYSQL, MySqlSchemaFetcher::new);
-
   private final SinkType sinkType;
-  private final String sinkConfigPath;
+  private final String sinkOptionsPath;
 
-  public FetchSchemaFn(SinkType sinkType, String sinkConfigPath) {
+  public FetchSchemaFn(SinkType sinkType, String sinkOptionsPath) {
     this.sinkType = sinkType;
-    this.sinkConfigPath = sinkConfigPath;
+    this.sinkOptionsPath = sinkOptionsPath;
   }
 
   @ProcessElement
   public void processElement(OutputReceiver<DataGeneratorSchema> receiver) {
     try {
+      String sinkOptionsJson = readSinkOptions(sinkOptionsPath);
       SinkSchemaFetcher fetcher = createFetcher(sinkType);
 
-      fetcher.init(sinkConfigPath);
+      fetcher.init(sinkOptionsPath, sinkOptionsJson);
       DataGeneratorSchema schema = fetcher.getSchema();
-      LOG.info("Fetched Schema: {}", schema);
+      LOG.info("Fetched Schema from DB: {}", schema);
+
       receiver.output(schema);
     } catch (IOException e) {
-      throw new RuntimeException("Failed to fetch schema", e);
+      throw new RuntimeException("Failed to fetch schema from DB", e);
     }
   }
 
   protected SinkSchemaFetcher createFetcher(SinkType sinkType) {
-    Supplier<SinkSchemaFetcher> provider = fetcherProviders.get(sinkType);
-    if (provider == null) {
-      throw new IllegalArgumentException("Unsupported sink type: " + sinkType);
-    }
-    return provider.get();
+    return SchemaLoader.createFetcher(sinkType);
+  }
+
+  protected String readSinkOptions(String path) throws IOException {
+    return SchemaLoader.readSinkOptions(path);
   }
 }

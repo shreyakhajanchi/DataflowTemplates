@@ -19,7 +19,7 @@ import com.github.javafaker.Faker;
 import com.google.cloud.teleport.v2.spanner.migrations.shard.Shard;
 import com.google.cloud.teleport.v2.spanner.migrations.utils.SecretManagerAccessorImpl;
 import com.google.cloud.teleport.v2.spanner.migrations.utils.ShardFileReader;
-import com.google.cloud.teleport.v2.templates.CdcDataGeneratorOptions.SinkType;
+import com.google.cloud.teleport.v2.templates.DataGeneratorOptions.SinkType;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
@@ -111,6 +111,9 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
   private final SinkType sinkType;
   private final String sinkOptionsPath;
   private final int batchSize;
+  private final Integer jdbcPoolSize;
+  private final Integer updateInterval;
+  private final Integer deleteInterval;
   private final PCollectionView<DataGeneratorSchema> schemaView;
 
   // Transient per-worker state.
@@ -143,13 +146,12 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
 
   @StateId("eventQueue")
   private final StateSpec<MapState<Long, List<LifecycleEvent>>> eventQueueSpec =
-      StateSpecs.map(
-          VarLongCoder.of(), ListCoder.of(SerializableCoder.of(LifecycleEvent.class)));
+      StateSpecs.map(VarLongCoder.of(), ListCoder.of(SerializableCoder.of(LifecycleEvent.class)));
 
   /**
    * Pending event timestamps (snapped to the second) for this key, in ascending order. We use a
-   * sorted {@code List<Long>} (with {@code ListCoder + VarLongCoder}) rather than a {@code
-   * TreeSet} so the order is preserved verbatim through checkpoint / restore.
+   * sorted {@code List<Long>} (with {@code ListCoder + VarLongCoder}) rather than a {@code TreeSet}
+   * so the order is preserved verbatim through checkpoint / restore.
    */
   @StateId("activeTimestamps")
   private final StateSpec<ValueState<List<Long>>> activeTimestampsSpec =
@@ -177,6 +179,26 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
     this.sinkType = sinkType;
     this.sinkOptionsPath = sinkOptionsPath;
     this.batchSize = (batchSize != null && batchSize > 0) ? batchSize : DEFAULT_BATCH_SIZE;
+    this.jdbcPoolSize = null;
+    this.updateInterval = null;
+    this.deleteInterval = null;
+    this.schemaView = schemaView;
+  }
+
+  public BatchAndWriteFn(
+      SinkType sinkType,
+      String sinkOptionsPath,
+      Integer batchSize,
+      Integer jdbcPoolSize,
+      Integer updateInterval,
+      Integer deleteInterval,
+      PCollectionView<DataGeneratorSchema> schemaView) {
+    this.sinkType = sinkType;
+    this.sinkOptionsPath = sinkOptionsPath;
+    this.batchSize = (batchSize != null && batchSize > 0) ? batchSize : DEFAULT_BATCH_SIZE;
+    this.jdbcPoolSize = jdbcPoolSize;
+    this.updateInterval = updateInterval;
+    this.deleteInterval = deleteInterval;
     this.schemaView = schemaView;
   }
 
@@ -273,7 +295,6 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
           eventTimer,
           /* forcedDeleteTimestamp= */ 0L,
           /* earliestAncestorDelete= */ Long.MAX_VALUE,
-          /* stickyShardId= */ null,
           new HashMap<>());
     } catch (Exception genError) {
       LOG.error("Generation failed for table {}", tableName, genError);
@@ -373,8 +394,8 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
 
   /**
    * One-shot materialization of the schema side-input and its derived topological ordering.
-   * Subsequent calls are no-ops. Beam guarantees a DoFn instance is used by at most one thread at
-   * a time, so no locking is needed; the {@code volatile} fields are defensive.
+   * Subsequent calls are no-ops. Beam guarantees a DoFn instance is used by at most one thread at a
+   * time, so no locking is needed; the {@code volatile} fields are defensive.
    */
   private void ensureSchemaInitialized(ProcessContext c) {
     if (schema != null) {
@@ -423,14 +444,16 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
       Timer eventTimer,
       long forcedDeleteTimestamp,
       long earliestAncestorDelete,
-      String stickyShardId,
       Map<String, Row> ancestorRows) {
 
     insertsGenerated.inc();
     String tableName = table.name();
     tableMapState.put(tableName, table);
 
-    String resolvedShardId = resolveShardId(row, stickyShardId);
+    String resolvedShardId =
+        row.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)
+            ? row.getString(Constants.SHARD_ID_COLUMN_NAME)
+            : "";
     Row fullRow = RowAssembler.completeRow(table, row, resolvedShardId, faker);
 
     LinkedHashMap<String, Object> pkMap = RowAssembler.pkValuesOf(fullRow, table);
@@ -444,6 +467,14 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
     long now = System.currentTimeMillis();
     long deleteTimestamp = 0L;
     int numUpdates = 0;
+    long upInterval =
+        (this.updateInterval != null && this.updateInterval > 0)
+            ? (this.updateInterval * 1000L)
+            : 5000L;
+    long delInterval =
+        (this.deleteInterval != null && this.deleteInterval > 0)
+            ? (this.deleteInterval * 1000L)
+            : 5000L;
 
     if (!pkMap.isEmpty()) {
       int tableInsertQps = table.insertQps();
@@ -462,17 +493,26 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
       if (forcedDeleteTimestamp > 0) {
         deleteTimestamp = forcedDeleteTimestamp;
       } else if (ThreadLocalRandom.current().nextDouble() < deleteRatio) {
-        deleteTimestamp = now + UPDATE_INTERVAL_MS * numUpdates + UPDATE_INTERVAL_MS;
+        deleteTimestamp = now + upInterval * numUpdates + delInterval;
       }
 
-      // Cap updates so the last one lands strictly before the earliest ancestor delete AND our
+      // Cap or compress updates so they land strictly before the earliest ancestor delete AND our
       // own forced delete (whichever is tighter).
       long myDeleteBound = deleteTimestamp > 0 ? deleteTimestamp : Long.MAX_VALUE;
       long effectiveDeleteBound = Math.min(myDeleteBound, earliestAncestorDelete);
-      if (effectiveDeleteBound < Long.MAX_VALUE) {
-        long budget = effectiveDeleteBound - now - ANCESTOR_DELETE_SLACK_MS;
-        long maxUpdates = budget > 0 ? budget / UPDATE_INTERVAL_MS : 0;
-        numUpdates = (int) Math.min(numUpdates, Math.max(0, maxUpdates));
+      if (effectiveDeleteBound < Long.MAX_VALUE && numUpdates > 0) {
+        long budget = effectiveDeleteBound - now - delInterval;
+        long timeNeeded = upInterval * numUpdates;
+        if (timeNeeded > budget) {
+          // Compression cadence calculation: Squeeze events into the remaining available budget
+          long minIntervalMs = 10L; // 10ms safety floor to avoid division by zero
+          upInterval = budget > 0 ? Math.max(minIntervalMs, budget / numUpdates) : minIntervalMs;
+
+          // Last-resort fallback: Apply referential safety truncation only if budget is too
+          // small/negative
+          long maxUpdates = budget > 0 ? budget / upInterval : 0;
+          numUpdates = (int) Math.min(numUpdates, Math.max(0, maxUpdates));
+        }
       }
     }
 
@@ -502,7 +542,6 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
             eventTimer,
             deleteTimestamp,
             childEarliestAncestorDelete,
-            resolvedShardId,
             updatedAncestorRows);
       }
     }
@@ -510,7 +549,7 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
     if (!pkMap.isEmpty()) {
       for (int i = 1; i <= numUpdates; i++) {
         scheduleEvent(
-            now + UPDATE_INTERVAL_MS * i,
+            now + upInterval * i,
             new LifecycleEvent(pkMap, Constants.MUTATION_UPDATE, tableName),
             eventQueueState,
             activeTimestamps,
@@ -538,7 +577,6 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
       Timer eventTimer,
       long forcedDeleteTimestamp,
       long earliestAncestorDelete,
-      String stickyShardId,
       Map<String, Row> ancestorRows) {
 
     double parentQps = Math.max(1, parentTable.insertQps());
@@ -550,7 +588,7 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
     }
 
     for (int i = 0; i < numChildren; i++) {
-      Row childRow = generateChildRow(parentTable, parentRow, childTable, ancestorRows, stickyShardId);
+      Row childRow = generateChildRow(parentTable, parentRow, childTable, ancestorRows);
       if (childRow == null) {
         unresolvableFkChildrenDropped.inc();
         continue;
@@ -565,7 +603,6 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
           eventTimer,
           forcedDeleteTimestamp,
           earliestAncestorDelete,
-          stickyShardId,
           ancestorRows);
     }
   }
@@ -580,8 +617,7 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
       DataGeneratorTable parentTable,
       Row parentRow,
       DataGeneratorTable childTable,
-      Map<String, Row> ancestorRows,
-      String stickyShardId) {
+      Map<String, Row> ancestorRows) {
 
     Map<String, Object> columnValues = new HashMap<>();
     boolean resolvedAllFks = true;
@@ -625,7 +661,7 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
     List<Object> values = new ArrayList<>();
 
     for (DataGeneratorColumn col : childTable.columns()) {
-      if (col.isSkipped()) {
+      if (col.skip()) {
         continue;
       }
       Object val = columnValues.get(col.name());
@@ -637,12 +673,10 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
       values.add(val);
     }
 
-    String shardId = null;
-    if (parentRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)) {
-      shardId = parentRow.getString(Constants.SHARD_ID_COLUMN_NAME);
-    } else if (stickyShardId != null && !stickyShardId.isEmpty()) {
-      shardId = stickyShardId;
-    }
+    String shardId =
+        parentRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)
+            ? parentRow.getString(Constants.SHARD_ID_COLUMN_NAME)
+            : null;
     if (shardId != null) {
       schemaBuilder.addField(
           Schema.Field.of(Constants.SHARD_ID_COLUMN_NAME, Schema.FieldType.STRING));
@@ -778,11 +812,7 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
 
   /** Buffers a row, flushing in topo order if the buffer tripped the batch-size limit. */
   private void bufferRow(
-      String tableName,
-      Row row,
-      String operation,
-      DataGeneratorTable table,
-      String shardIdHint) {
+      String tableName, Row row, String operation, DataGeneratorTable table, String shardIdHint) {
 
     String shardId = shardIdHint == null ? "" : shardIdHint;
     if (shardId.isEmpty() && row.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)) {
@@ -809,19 +839,6 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
 
   private boolean hasShards() {
     return logicalShardIds != null && !logicalShardIds.isEmpty();
-  }
-
-  private String resolveShardId(Row row, String inherited) {
-    if (inherited != null && !inherited.isEmpty()) {
-      return inherited;
-    }
-    if (row.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)) {
-      return row.getString(Constants.SHARD_ID_COLUMN_NAME);
-    }
-    if (sinkType == SinkType.MYSQL && hasShards()) {
-      return logicalShardIds.get(ThreadLocalRandom.current().nextInt(logicalShardIds.size()));
-    }
-    return "";
   }
 
   private void flushInsertsInTopoOrder() {
@@ -897,7 +914,10 @@ public class BatchAndWriteFn extends DoFn<KV<String, Row>, String> {
       return;
     }
 
-    int maxShardConnections = Constants.DEFAULT_JDBC_POOL_SIZE;
+    int maxShardConnections =
+        (this.jdbcPoolSize != null && this.jdbcPoolSize > 0)
+            ? this.jdbcPoolSize
+            : Constants.DEFAULT_JDBC_POOL_SIZE;
     try {
       switch (operation) {
         case Constants.MUTATION_INSERT:

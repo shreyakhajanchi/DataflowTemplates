@@ -15,22 +15,14 @@
  */
 package com.google.cloud.teleport.v2.templates.transforms;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThrows;
-
-import com.google.cloud.teleport.v2.templates.dofn.ScaleTicksFn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import org.apache.beam.sdk.testing.PAssert;
+import java.io.Serializable;
 import org.apache.beam.sdk.testing.TestPipeline;
 import org.apache.beam.sdk.transforms.Create;
 import org.apache.beam.sdk.transforms.View;
-import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.joda.time.Instant;
 import org.junit.Rule;
@@ -38,109 +30,85 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/** Tests for {@link GenerateTicks} and its {@link ScaleTicksFn}. */
 @RunWith(JUnit4.class)
-public class GenerateTicksTest {
+public class GenerateTicksTest implements Serializable {
 
-  @Rule public final transient TestPipeline pipeline = TestPipeline.create();
-
-  private static DataGeneratorTable root(String name, int insertQps) {
-    return DataGeneratorTable.builder()
-        .name(name)
-        .insertQps(insertQps)
-        .updateQps(0)
-        .deleteQps(0)
-        .isRoot(true)
-        .columns(ImmutableList.of())
-        .primaryKeys(ImmutableList.of())
-        .foreignKeys(ImmutableList.of())
-        .uniqueKeys(ImmutableList.of())
-        .recordsPerTick(1.0)
-        .build();
-  }
-
-  private static DataGeneratorTable child(String name, String parent, int insertQps) {
-    return DataGeneratorTable.builder()
-        .name(name)
-        .insertQps(insertQps)
-        .updateQps(0)
-        .deleteQps(0)
-        .isRoot(false)
-        .interleavedInTable(parent)
-        .columns(ImmutableList.of())
-        .primaryKeys(ImmutableList.of())
-        .foreignKeys(ImmutableList.of())
-        .uniqueKeys(ImmutableList.of())
-        .recordsPerTick(1.0)
-        .build();
-  }
+  @Rule
+  public final transient TestPipeline pipeline =
+      TestPipeline.create().enableAbandonedNodeEnforcement(false);
 
   @Test
-  public void testTotalRootQps_sumsOnlyRootTables() {
+  public void testGenerateTicks() {
+    DataGeneratorTable rootTable1 =
+        DataGeneratorTable.builder()
+            .name("Root1")
+            .isRoot(true)
+            .insertQps(10)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .build();
+
+    DataGeneratorTable rootTable2 =
+        DataGeneratorTable.builder()
+            .name("Root2")
+            .isRoot(true)
+            .insertQps(10)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .build();
+
+    DataGeneratorTable childTable =
+        DataGeneratorTable.builder()
+            .name("Child")
+            .isRoot(false)
+            .interleavedInTable("Root1")
+            .insertQps(5)
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .build();
+
     DataGeneratorSchema schema =
         DataGeneratorSchema.builder()
             .tables(
                 ImmutableMap.of(
-                    "A", root("A", 10),
-                    "B", child("B", "A", 100),
-                    "C", root("C", 50)))
+                    "Root1", rootTable1,
+                    "Root2", rootTable2,
+                    "Child", childTable))
             .build();
-    assertEquals(60, ScaleTicksFn.totalRootQps(schema));
-  }
 
-  @Test
-  public void testTotalRootQps_emptySchemaIsZero() {
-    DataGeneratorSchema schema = DataGeneratorSchema.builder().tables(ImmutableMap.of()).build();
-    assertEquals(0, ScaleTicksFn.totalRootQps(schema));
-  }
-
-  @Test
-  public void testTotalRootQps_allNonRoot() {
-    DataGeneratorSchema schema =
-        DataGeneratorSchema.builder().tables(ImmutableMap.of("B", child("B", "A", 100))).build();
-    assertEquals(0, ScaleTicksFn.totalRootQps(schema));
-  }
-
-  @Test
-  public void testScaleTicks_zeroTotalQpsThrowsException() {
-    DataGeneratorSchema schema =
-        DataGeneratorSchema.builder().tables(ImmutableMap.of("B", child("B", "A", 42))).build();
     PCollectionView<DataGeneratorSchema> schemaView =
-        pipeline.apply("MkSchema", Create.of(schema)).apply("AsView", View.asSingleton());
+        pipeline.apply("CreateSchema", Create.of(schema)).apply("ViewSchema", View.asSingleton());
 
-    pipeline
-        .apply("Input", Create.of(buildInstantSequence(50)))
-        .apply("GenerateTicks", new GenerateTicks(schemaView));
+    // Integration tests or specialized TestStream usage would be needed for
+    // verifying timing precision.
+    // However, given the refactoring, we can verify the scale multiplier logic with
+    // a bounded Create transform.
 
-    assertThrows(RuntimeException.class, () -> pipeline.run());
-  }
-
-  @Test
-  public void testScaleTicks_emitsTotalQpsCopies() {
-    DataGeneratorSchema schema =
-        DataGeneratorSchema.builder().tables(ImmutableMap.of("A", root("A", 10))).build();
-    PCollectionView<DataGeneratorSchema> schemaView =
-        pipeline.apply("MkSchema", Create.of(schema)).apply("AsView", View.asSingleton());
-
-    int inputCount = 5;
-    PCollection<Long> output =
+    org.apache.beam.sdk.values.PCollection<Long> scaledTicks =
         pipeline
-            .apply("Input", Create.of(buildInstantSequence(inputCount)))
+            .apply(
+                "Trigger",
+                Create.of(
+                    Instant.ofEpochMilli(100),
+                    Instant.ofEpochMilli(200),
+                    Instant.ofEpochMilli(300),
+                    Instant.ofEpochMilli(400),
+                    Instant.ofEpochMilli(500))) // 5 incoming ticks
             .apply("GenerateTicks", new GenerateTicks(schemaView));
 
-    PAssert.thatSingleton(output.apply("Count", org.apache.beam.sdk.transforms.Count.globally()))
-        .isEqualTo((long) inputCount * 10);
-    pipeline.run();
-  }
+    // Because total QPS is 20, each incoming tick generates 20 output ticks.
+    // 5 incoming ticks * 20 = 100 output ticks.
+    org.apache.beam.sdk.values.PCollection<Long> count =
+        scaledTicks.apply("Count", org.apache.beam.sdk.transforms.Count.globally());
 
-  private static List<Instant> buildInstantSequence(int count) {
-    if (count <= 0) {
-      return Collections.emptyList();
-    }
-    List<Instant> out = new ArrayList<>(count);
-    for (long i = 0; i < count; i++) {
-      out.add(Instant.ofEpochMilli(i));
-    }
-    return out;
+    org.apache.beam.sdk.testing.PAssert.that(count).containsInAnyOrder(100L);
+
+    pipeline.run().waitUntilFinish();
   }
 }

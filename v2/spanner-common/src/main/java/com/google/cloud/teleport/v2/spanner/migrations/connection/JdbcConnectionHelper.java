@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
 public class JdbcConnectionHelper implements IConnectionHelper<Connection> {
 
   private static final Logger LOG = LoggerFactory.getLogger(JdbcConnectionHelper.class);
-  private static Map<String, HikariDataSource> connectionPoolMap = null;
+  private static volatile Map<String, HikariDataSource> connectionPoolMap = null;
 
   @Override
   public synchronized boolean isConnectionPoolInitialized() {
@@ -49,17 +49,10 @@ public class JdbcConnectionHelper implements IConnectionHelper<Connection> {
     }
     LOG.info(
         "Initializing connection pool with size: {}", connectionHelperRequest.getMaxConnections());
-    connectionPoolMap = new HashMap<>();
+    Map<String, HikariDataSource> localMap = new HashMap<>();
     for (Shard shard : connectionHelperRequest.getShards()) {
       String sourceConnectionUrl =
-          new StringBuilder()
-              .append(connectionHelperRequest.getJdbcUrlPrefix())
-              .append(shard.getHost())
-              .append(":")
-              .append(shard.getPort())
-              .append("/")
-              .append(shard.getDbName())
-              .toString();
+          "jdbc:mysql://" + shard.getHost() + ":" + shard.getPort() + "/" + shard.getDbName();
       HikariConfig config = new HikariConfig();
       config.setJdbcUrl(sourceConnectionUrl);
       config.setUsername(shard.getUserName());
@@ -83,8 +76,9 @@ public class JdbcConnectionHelper implements IConnectionHelper<Connection> {
         config.addDataSourceProperty(key, value);
       }
       HikariDataSource ds = new HikariDataSource(config);
-      connectionPoolMap.put(sourceConnectionUrl + "/" + shard.getUserName(), ds);
+      localMap.put(sourceConnectionUrl + "/" + shard.getUserName(), ds);
     }
+    connectionPoolMap = localMap;
   }
 
   @Override

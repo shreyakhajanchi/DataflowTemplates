@@ -15,22 +15,21 @@
  */
 package com.google.cloud.teleport.v2.templates.mysql;
 
+import com.google.cloud.spanner.Dialect;
 import com.google.cloud.teleport.v2.spanner.migrations.shard.Shard;
 import com.google.cloud.teleport.v2.spanner.migrations.utils.SecretManagerAccessorImpl;
 import com.google.cloud.teleport.v2.spanner.migrations.utils.ShardFileReader;
 import com.google.cloud.teleport.v2.spanner.sourceddl.MySqlInformationSchemaScanner;
 import com.google.cloud.teleport.v2.spanner.sourceddl.SourceColumn;
 import com.google.cloud.teleport.v2.spanner.sourceddl.SourceForeignKey;
-import com.google.cloud.teleport.v2.spanner.sourceddl.SourceIndex;
 import com.google.cloud.teleport.v2.spanner.sourceddl.SourceSchema;
 import com.google.cloud.teleport.v2.spanner.sourceddl.SourceTable;
+import com.google.cloud.teleport.v2.templates.common.SinkSchemaFetcher;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorUniqueKey;
-import com.google.cloud.teleport.v2.templates.sink.SinkSchemaFetcher;
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
@@ -43,47 +42,24 @@ import java.util.stream.Collectors;
 
 public class MySqlSchemaFetcher implements SinkSchemaFetcher {
 
-  @FunctionalInterface
-  interface ConnectionProvider {
-    Connection get() throws SQLException;
-  }
-
   private String driverClassName;
   private String connectionUrl;
   private String username;
   private String password;
-
+  private int qps;
   private final MySqlTypeMapper typeMapper = new MySqlTypeMapper();
 
-  private final ShardFileReader shardFileReader;
-  private final ConnectionProvider connectionProvider;
-
-  public MySqlSchemaFetcher() {
-    this(new ShardFileReader(new SecretManagerAccessorImpl()), null);
-  }
-
-  @VisibleForTesting
-  MySqlSchemaFetcher(ShardFileReader shardFileReader, ConnectionProvider connectionProvider) {
-    this.shardFileReader = shardFileReader;
-    this.connectionProvider = connectionProvider;
-  }
-
-  @VisibleForTesting
-  protected MySqlInformationSchemaScanner createScanner(
-      Connection connection, String databaseName) {
-    return new MySqlInformationSchemaScanner(connection, databaseName);
-  }
-
   @Override
-  public void init(String sinkConfigPath) {
-    if (sinkConfigPath == null || sinkConfigPath.isEmpty()) {
+  public void init(String optionsFilePath, String jsonData) {
+    if (optionsFilePath == null || optionsFilePath.isEmpty()) {
       throw new IllegalArgumentException(
           "MySQL sink requires a valid shard configuration file path.");
     }
 
-    List<Shard> shards = shardFileReader.getOrderedShardDetails(sinkConfigPath);
+    ShardFileReader shardFileReader = new ShardFileReader(new SecretManagerAccessorImpl());
+    List<Shard> shards = shardFileReader.getOrderedShardDetails(optionsFilePath);
     if (shards == null || shards.isEmpty()) {
-      throw new RuntimeException("No shards found in the provided shard file: " + sinkConfigPath);
+      throw new RuntimeException("No shards found in the provided shard file: " + optionsFilePath);
     }
     // Use the first shard to extract schema
     Shard firstShard = shards.get(0);
@@ -92,6 +68,8 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
 
     String host = firstShard.getHost();
     String port = firstShard.getPort();
+    // Grab the first dbName for the connection if mapped, otherwise it connects at
+    // root
     String dbName = "";
     if (!firstShard.getDbName().isEmpty()) {
       dbName = firstShard.getDbName();
@@ -103,6 +81,11 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
       this.connectionUrl += "?" + firstShard.getConnectionProperties();
     }
     this.driverClassName = "com.mysql.cj.jdbc.Driver";
+  }
+
+  @Override
+  public void setQps(int qps) {
+    this.qps = qps;
   }
 
   @Override
@@ -121,20 +104,28 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
 
   private DataGeneratorSchema scanMySqlSchema(Connection connection) throws SQLException {
     String databaseName = connection.getCatalog();
-    MySqlInformationSchemaScanner scanner = createScanner(connection, databaseName);
+    MySqlInformationSchemaScanner scanner = createMySqlScanner(connection, databaseName);
     SourceSchema sourceSchema = scanner.scan();
 
     Map<String, DataGeneratorTable> tables =
         sourceSchema.tables().values().stream()
-            .collect(Collectors.toMap(SourceTable::name, table -> mapSourceTable(table)));
+            .collect(
+                Collectors.toMap(
+                    SourceTable::name,
+                    table -> mapSourceTable(table, Dialect.GOOGLE_STANDARD_SQL)));
 
     return DataGeneratorSchema.builder().tables(ImmutableMap.copyOf(tables)).build();
   }
 
-  private DataGeneratorTable mapSourceTable(SourceTable table) {
+  protected MySqlInformationSchemaScanner createMySqlScanner(
+      Connection connection, String databaseName) {
+    return new MySqlInformationSchemaScanner(connection, databaseName);
+  }
+
+  private DataGeneratorTable mapSourceTable(SourceTable table, Dialect dialect) {
     ImmutableList.Builder<DataGeneratorColumn> columnsBuilder = ImmutableList.builder();
     for (SourceColumn column : table.columns()) {
-      columnsBuilder.add(mapSourceColumn(column));
+      columnsBuilder.add(mapSourceColumn(column, dialect));
     }
 
     ImmutableList.Builder<DataGeneratorForeignKey> foreignKeysBuilder = ImmutableList.builder();
@@ -151,14 +142,13 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
     }
 
     ImmutableList.Builder<DataGeneratorUniqueKey> uniqueKeysBuilder = ImmutableList.builder();
-    if (table.indexes() != null) {
-      for (SourceIndex index : table.indexes()) {
-        if (index.isUnique() && !index.isPrimary()) {
-          uniqueKeysBuilder.add(
-              DataGeneratorUniqueKey.builder().name(index.name()).columns(index.columns()).build());
-        }
-      }
-    }
+    // if (table.uniqueKeys() != null) {
+    //   for (SourceUniqueKey uk : table.uniqueKeys()) {
+    //     uniqueKeysBuilder.add(
+    //
+    // DataGeneratorUniqueKey.builder().name(uk.name()).keyColumns(uk.keyColumns()).build());
+    //   }
+    // }
 
     return DataGeneratorTable.builder()
         .name(table.name())
@@ -167,29 +157,47 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
         .foreignKeys(foreignKeysBuilder.build())
         .uniqueKeys(uniqueKeysBuilder.build())
         .isRoot(true)
-        .insertQps(0)
-        .updateQps(0) // Default value
-        .deleteQps(0) // Default value
-        .recordsPerTick(1.0) // Default value
+        .insertQps(qps)
         .build();
   }
 
-  private DataGeneratorColumn mapSourceColumn(SourceColumn column) {
-    return DataGeneratorColumn.builder()
-        .name(column.name())
-        .logicalType(typeMapper.getLogicalType(column.type(), null, column.size()))
-        .isNullable(column.isNullable())
-        .isGenerated(column.isGenerated())
-        .size(column.size())
-        .precision(column.precision())
-        .scale(column.scale())
-        .build();
+  private DataGeneratorColumn mapSourceColumn(SourceColumn column, Dialect dialect) {
+    DataGeneratorColumn.Builder builder =
+        DataGeneratorColumn.builder()
+            .name(column.name())
+            .logicalType(typeMapper.getLogicalType(column.type(), dialect, column.size()))
+            .isNullable(column.isNullable())
+            .isPrimaryKey(column.isPrimaryKey())
+            .isGenerated(column.isGenerated())
+            .originalType(column.type())
+            .size(column.size())
+            .precision(column.precision())
+            .scale(column.scale());
+
+    if (column.type() != null
+        && (column.type().toUpperCase().startsWith("ENUM")
+            || column.type().toUpperCase().startsWith("SET"))) {
+      builder.enumValues(parseEnumValues(column.type()));
+    }
+
+    return builder.build();
+  }
+
+  private java.util.List<String> parseEnumValues(String type) {
+    java.util.List<String> values = new java.util.ArrayList<>();
+    if (type == null || !type.contains("(")) {
+      return values;
+    }
+    String content = type.substring(type.indexOf("(") + 1, type.lastIndexOf(")"));
+    // Split by comma, assuming standard MySQL format 'a','b','c'
+    String[] parts = content.split(",");
+    for (String part : parts) {
+      values.add(part.trim().replace("'", ""));
+    }
+    return values;
   }
 
   protected Connection getConnection() throws SQLException {
-    if (this.connectionProvider != null) {
-      return this.connectionProvider.get();
-    }
     return DriverManager.getConnection(connectionUrl, username, password);
   }
 }

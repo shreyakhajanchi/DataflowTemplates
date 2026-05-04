@@ -15,8 +15,19 @@
  */
 package com.google.cloud.teleport.v2.templates.utils;
 
-/** Constants shared across the CDC Data Generator template. */
-public final class Constants {
+/** Constants used across the Data Generator template. */
+public class Constants {
+
+  public static final String SHARD_ID_COLUMN_NAME = "_dg_shard_id";
+
+  // Mutation Types
+  public static final String MUTATION_INSERT = "INSERT";
+  public static final String MUTATION_UPDATE = "UPDATE";
+  public static final String MUTATION_DELETE = "DELETE";
+
+  // Sink Types
+  public static final String SINK_TYPE_MYSQL = "MYSQL";
+  public static final String SINK_TYPE_SPANNER = "SPANNER";
 
   // Default HikariCP pool size per shard when writing to JDBC sinks.
   public static final int DEFAULT_JDBC_POOL_SIZE = 10;
@@ -35,16 +46,7 @@ public final class Constants {
   public static final String SPANNER_CONFIG_INSTANCE_ID_KEY = "instanceId";
   public static final String SPANNER_CONFIG_DATABASE_ID_KEY = "databaseId";
 
-  // Mutation type identifiers used as buffer-key suffixes when batching writes.
-  public static final String MUTATION_INSERT = "INSERT";
-  public static final String MUTATION_UPDATE = "UPDATE";
-  public static final String MUTATION_DELETE = "DELETE";
-
-  // Synthetic column name carried on rows so that lifecycle events can be routed back to the
-  // correct logical shard at write-time. Sinks that are not sharded simply ignore it.
-  public static final String SHARD_ID_COLUMN_NAME = "_dg_shard_id";
-
   private Constants() {
-    // Prevent instantiation.
+    // Prevent instantiation
   }
 }

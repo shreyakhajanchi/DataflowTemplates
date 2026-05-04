@@ -15,67 +15,88 @@
  */
 package com.google.cloud.teleport.v2.templates.spanner;
 
-import static com.google.common.truth.Truth.assertThat;
-import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertEquals;
 
 import com.google.cloud.spanner.Dialect;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.junit.runners.JUnit4;
 
-@RunWith(JUnit4.class)
 public class SpannerTypeMapperTest {
 
   private final SpannerTypeMapper mapper = new SpannerTypeMapper();
 
   @Test
-  public void testGetLogicalType_googleSql() {
-    Dialect dialect = Dialect.GOOGLE_STANDARD_SQL;
-    assertThat(mapper.getLogicalType("BOOL", dialect, null)).isEqualTo(LogicalType.BOOLEAN);
-    assertThat(mapper.getLogicalType("INT64", dialect, null)).isEqualTo(LogicalType.INT64);
-    assertThat(mapper.getLogicalType("FLOAT64", dialect, null)).isEqualTo(LogicalType.FLOAT64);
-    assertThat(mapper.getLogicalType("STRING(MAX)", dialect, null)).isEqualTo(LogicalType.STRING);
-    assertThat(mapper.getLogicalType("BYTES(1024)", dialect, null)).isEqualTo(LogicalType.BYTES);
-    assertThat(mapper.getLogicalType("DATE", dialect, null)).isEqualTo(LogicalType.DATE);
-    assertThat(mapper.getLogicalType("TIMESTAMP", dialect, null)).isEqualTo(LogicalType.TIMESTAMP);
-    assertThat(mapper.getLogicalType("NUMERIC", dialect, null)).isEqualTo(LogicalType.NUMERIC);
-    assertThat(mapper.getLogicalType("JSON", dialect, null)).isEqualTo(LogicalType.JSON);
-    assertThat(mapper.getLogicalType("ARRAY<INT64>", dialect, null))
-        .isEqualTo(LogicalType.STRING); // Default
-    assertThrows(IllegalArgumentException.class, () -> mapper.getLogicalType(null, dialect, null));
+  public void testGoogleStandardSqlMapping() {
+    // Basic types
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "BOOL", LogicalType.BOOLEAN);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "INT64", LogicalType.INT64);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "FLOAT64", LogicalType.FLOAT64);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "FLOAT32", LogicalType.FLOAT64);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "STRING", LogicalType.STRING);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "BYTES", LogicalType.BYTES);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "DATE", LogicalType.DATE);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "TIMESTAMP", LogicalType.TIMESTAMP);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "NUMERIC", LogicalType.NUMERIC);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "BIGNUMERIC", LogicalType.NUMERIC);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "JSON", LogicalType.JSON);
+
+    // Parameterized types
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "STRING(MAX)", LogicalType.STRING);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "STRING(100)", LogicalType.STRING);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "BYTES(MAX)", LogicalType.BYTES);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "BYTES(100)", LogicalType.BYTES);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "NUMERIC(10,2)", LogicalType.NUMERIC);
+
+    // Complex types (sanitization strips parameters)
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "ARRAY<INT64>", LogicalType.ARRAY);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "ARRAY<STRING(MAX)>", LogicalType.ARRAY);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "STRUCT<a INT64>", LogicalType.STRUCT);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "STRUCT<a INT64, b STRING>", LogicalType.STRUCT);
+
+    // Case insensitivity
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "bool", LogicalType.BOOLEAN);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "Int64", LogicalType.INT64);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "String(Max)", LogicalType.STRING);
+
+    // Unknown/Null
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, "UNKNOWN", LogicalType.STRING);
+    verifyMapping(Dialect.GOOGLE_STANDARD_SQL, null, LogicalType.STRING);
   }
 
   @Test
-  public void testGetLogicalType_postgreSql() {
-    Dialect dialect = Dialect.POSTGRESQL;
-    assertThat(mapper.getLogicalType("boolean", dialect, null)).isEqualTo(LogicalType.BOOLEAN);
-    assertThat(mapper.getLogicalType("bigint", dialect, null)).isEqualTo(LogicalType.INT64);
-    assertThat(mapper.getLogicalType("double precision", dialect, null))
-        .isEqualTo(LogicalType.FLOAT64);
-    assertThat(mapper.getLogicalType("varchar(255)", dialect, null)).isEqualTo(LogicalType.STRING);
-    assertThat(mapper.getLogicalType("text", dialect, null)).isEqualTo(LogicalType.STRING);
-    assertThat(mapper.getLogicalType("bytea", dialect, null)).isEqualTo(LogicalType.BYTES);
-    assertThat(mapper.getLogicalType("date", dialect, null)).isEqualTo(LogicalType.DATE);
-    assertThat(mapper.getLogicalType("timestamp with time zone", dialect, null))
-        .isEqualTo(LogicalType.TIMESTAMP);
-    assertThat(mapper.getLogicalType("numeric(10,2)", dialect, null))
-        .isEqualTo(LogicalType.NUMERIC);
-    assertThat(mapper.getLogicalType("jsonb", dialect, null)).isEqualTo(LogicalType.JSON);
-    assertThrows(IllegalArgumentException.class, () -> mapper.getLogicalType(null, dialect, null));
+  public void testPostgreSqlMapping() {
+    verifyMapping(Dialect.POSTGRESQL, "boolean", LogicalType.BOOLEAN);
+    verifyMapping(Dialect.POSTGRESQL, "bool", LogicalType.BOOLEAN);
+    verifyMapping(Dialect.POSTGRESQL, "bigint", LogicalType.INT64);
+    verifyMapping(Dialect.POSTGRESQL, "int8", LogicalType.INT64);
+    verifyMapping(Dialect.POSTGRESQL, "real", LogicalType.FLOAT64);
+    verifyMapping(Dialect.POSTGRESQL, "double precision", LogicalType.FLOAT64);
+    verifyMapping(Dialect.POSTGRESQL, "float4", LogicalType.FLOAT64);
+    verifyMapping(Dialect.POSTGRESQL, "float8", LogicalType.FLOAT64);
+    verifyMapping(Dialect.POSTGRESQL, "varchar", LogicalType.STRING);
+    verifyMapping(Dialect.POSTGRESQL, "text", LogicalType.STRING);
+    verifyMapping(Dialect.POSTGRESQL, "character varying", LogicalType.STRING);
+    verifyMapping(Dialect.POSTGRESQL, "bytea", LogicalType.BYTES);
+    verifyMapping(Dialect.POSTGRESQL, "date", LogicalType.DATE);
+    verifyMapping(Dialect.POSTGRESQL, "timestamp with time zone", LogicalType.TIMESTAMP);
+    verifyMapping(Dialect.POSTGRESQL, "timestamptz", LogicalType.TIMESTAMP);
+    verifyMapping(Dialect.POSTGRESQL, "numeric", LogicalType.NUMERIC);
+    verifyMapping(Dialect.POSTGRESQL, "decimal", LogicalType.NUMERIC);
+    verifyMapping(Dialect.POSTGRESQL, "jsonb", LogicalType.JSON);
+
+    // Parameterized PG types
+    verifyMapping(Dialect.POSTGRESQL, "varchar(255)", LogicalType.STRING);
+    verifyMapping(Dialect.POSTGRESQL, "numeric(10,2)", LogicalType.NUMERIC);
+
+    // Case insensitivity
+    verifyMapping(Dialect.POSTGRESQL, "VARCHAR", LogicalType.STRING);
+    verifyMapping(Dialect.POSTGRESQL, "BigInt", LogicalType.INT64);
+
+    verifyMapping(Dialect.POSTGRESQL, "unknown", LogicalType.STRING);
   }
 
-  @Test
-  public void testGetLogicalType_invalidDialect() {
-    IllegalArgumentException exception =
-        assertThrows(
-            IllegalArgumentException.class,
-            () -> mapper.getLogicalType("INT64", "not a dialect", null));
-    assertThat(exception).hasMessageThat().contains("Expected com.google.cloud.spanner.Dialect");
-
-    exception =
-        assertThrows(
-            IllegalArgumentException.class, () -> mapper.getLogicalType("INT64", null, null));
-    assertThat(exception).hasMessageThat().contains("Expected com.google.cloud.spanner.Dialect");
+  private void verifyMapping(Dialect dialect, String inputType, LogicalType expected) {
+    assertEquals(
+        "Failed for type: " + inputType, expected, mapper.getLogicalType(inputType, dialect));
   }
 }
