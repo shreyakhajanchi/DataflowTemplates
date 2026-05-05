@@ -24,12 +24,12 @@ import com.google.cloud.teleport.v2.templates.utils.Constants;
 import com.google.cloud.teleport.v2.templates.utils.DataGeneratorUtils;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.apache.beam.sdk.schemas.Schema;
 import org.apache.beam.sdk.values.Row;
 
@@ -42,11 +42,12 @@ import org.apache.beam.sdk.values.Row;
  */
 final class RowAssembler {
 
-  private RowAssembler() {}
+  private static final Map<DataGeneratorTable, Set<String>> UNIQUE_COLUMNS_CACHE =
+      new ConcurrentHashMap<>();
+  private static final Map<DataGeneratorTable, Set<String>> FK_COLUMNS_CACHE =
+      new ConcurrentHashMap<>();
 
-  // ===========================================================================
-  // Primary-key helpers
-  // ===========================================================================
+  private RowAssembler() {}
 
   /**
    * Extracts primary-key column values from {@code row} in declared PK-column order. Preserves the
@@ -56,9 +57,13 @@ final class RowAssembler {
   static LinkedHashMap<String, Object> pkValuesOf(Row row, DataGeneratorTable table) {
     LinkedHashMap<String, Object> pk = new LinkedHashMap<>();
     for (String pkCol : table.primaryKeys()) {
-      if (row.getSchema().hasField(pkCol)) {
-        pk.put(pkCol, row.getValue(pkCol));
+      if (!row.getSchema().hasField(pkCol)) {
+        throw new IllegalArgumentException(
+            String.format(
+                "Required Primary Key column '%s' missing from row schema for table '%s'",
+                pkCol, table.name()));
       }
+      pk.put(pkCol, row.getValue(pkCol));
     }
     return pk;
   }
@@ -77,46 +82,11 @@ final class RowAssembler {
         sb.append("#");
       }
       first = false;
-      sb.append(canonicalizeValue(e.getValue()));
+      Object val = DataGeneratorUtils.canonicalizeValue(e.getValue());
+      sb.append(val == null ? "null" : val);
     }
     return sb.toString();
   }
-
-  /**
-   * Canonical string form of a PK value. Hex-encodes byte arrays and {@link ByteBuffer}s so the
-   * derived key is identical everywhere; everything else falls back to {@link Object#toString()}.
-   */
-  static String canonicalizeValue(Object v) {
-    if (v == null) {
-      return "null";
-    }
-    if (v instanceof byte[]) {
-      return "0x" + bytesToHex((byte[]) v);
-    }
-    if (v instanceof ByteBuffer) {
-      ByteBuffer bb = ((ByteBuffer) v).duplicate();
-      byte[] bytes = new byte[bb.remaining()];
-      bb.get(bytes);
-      return "0x" + bytesToHex(bytes);
-    }
-    return v.toString();
-  }
-
-  private static final char[] HEX_CHARS = "0123456789abcdef".toCharArray();
-
-  private static String bytesToHex(byte[] bytes) {
-    char[] out = new char[bytes.length * 2];
-    for (int i = 0; i < bytes.length; i++) {
-      int b = bytes[i] & 0xff;
-      out[i * 2] = HEX_CHARS[b >>> 4];
-      out[i * 2 + 1] = HEX_CHARS[b & 0x0f];
-    }
-    return new String(out);
-  }
-
-  // ===========================================================================
-  // Row construction
-  // ===========================================================================
 
   /** Returns the names of all columns covered by any unique key on {@code table}. */
   static Set<String> uniqueColumnNames(DataGeneratorTable table) {
@@ -156,8 +126,9 @@ final class RowAssembler {
     Schema.Builder schemaBuilder = Schema.builder();
     List<Object> values = new ArrayList<>();
     Set<String> pkSet = new HashSet<>(table.primaryKeys());
-    Set<String> fkColumns = foreignKeyColumns(table);
-    Set<String> uniqueColumns = uniqueColumnNames(table);
+    Set<String> fkColumns = FK_COLUMNS_CACHE.computeIfAbsent(table, k -> foreignKeyColumns(table));
+    Set<String> uniqueColumns =
+        UNIQUE_COLUMNS_CACHE.computeIfAbsent(table, k -> uniqueColumnNames(table));
 
     for (DataGeneratorColumn col : table.columns()) {
       if (col.skip()) {
@@ -223,8 +194,9 @@ final class RowAssembler {
     Schema.Builder schemaBuilder = Schema.builder();
     List<Object> values = new ArrayList<>();
     Set<String> pkSet = new HashSet<>(table.primaryKeys());
-    Set<String> fkColumns = foreignKeyColumns(table);
-    Set<String> uniqueColumns = uniqueColumnNames(table);
+    Set<String> fkColumns = FK_COLUMNS_CACHE.computeIfAbsent(table, k -> foreignKeyColumns(table));
+    Set<String> uniqueColumns =
+        UNIQUE_COLUMNS_CACHE.computeIfAbsent(table, k -> uniqueColumnNames(table));
 
     for (DataGeneratorColumn col : table.columns()) {
       if (col.skip()) {
@@ -253,8 +225,7 @@ final class RowAssembler {
    *
    * <p>If {@code partialRow} already contains every non-skipped column, it is returned unchanged.
    */
-  static Row completeRow(
-      DataGeneratorTable table, Row partialRow, String shardIdHint, Faker faker) {
+  static Row completeRow(DataGeneratorTable table, Row partialRow, Faker faker) {
     boolean hasAllColumns = true;
     for (DataGeneratorColumn col : table.columns()) {
       if (col.skip()) {
@@ -269,33 +240,23 @@ final class RowAssembler {
       return partialRow;
     }
 
-    Map<String, Object> currentValues = new HashMap<>();
-    for (Schema.Field field : partialRow.getSchema().getFields()) {
-      currentValues.put(field.getName(), partialRow.getValue(field.getName()));
-    }
-
     Schema.Builder schemaBuilder = Schema.builder();
     List<Object> values = new ArrayList<>();
     for (DataGeneratorColumn col : table.columns()) {
       if (col.skip()) {
         continue;
       }
-      Object val = currentValues.get(col.name());
-      if (val == null) {
-        val = DataGeneratorUtils.generateValue(col, faker);
-      }
+      Object val =
+          partialRow.getSchema().hasField(col.name())
+              ? partialRow.getValue(col.name())
+              : DataGeneratorUtils.generateValue(col, faker);
       schemaBuilder.addField(
           Schema.Field.of(col.name(), DataGeneratorUtils.mapToBeamFieldType(col.logicalType())));
       values.add(val);
     }
 
-    String shardId = null;
     if (partialRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)) {
-      shardId = partialRow.getString(Constants.SHARD_ID_COLUMN_NAME);
-    } else if (shardIdHint != null && !shardIdHint.isEmpty()) {
-      shardId = shardIdHint;
-    }
-    if (shardId != null) {
+      String shardId = partialRow.getString(Constants.SHARD_ID_COLUMN_NAME);
       schemaBuilder.addField(
           Schema.Field.of(Constants.SHARD_ID_COLUMN_NAME, Schema.FieldType.STRING));
       values.add(shardId);

@@ -63,7 +63,7 @@ public abstract class DataGeneratorColumn implements Serializable {
 
   /** The custom generator for this column (e.g., Faker expression). */
   @Nullable
-  public abstract String generator();
+  public abstract Object generator();
 
   /** Whether to skip data generation for this column. */
   public abstract boolean skip();
@@ -98,7 +98,7 @@ public abstract class DataGeneratorColumn implements Serializable {
 
     public abstract Builder elementType(LogicalType elementType);
 
-    public abstract Builder generator(String generator);
+    public abstract Builder generator(Object generator);
 
     public abstract Builder skip(boolean skip);
 

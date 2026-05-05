@@ -72,39 +72,10 @@ public final class FailureRecord {
       } catch (Exception e) {
         raw = "<unreadable: " + e.getClass().getSimpleName() + ">";
       }
-      obj.put(field.getName(), canonicalize(raw));
+      Object val = DataGeneratorUtils.canonicalizeValue(raw);
+      obj.put(field.getName(), val == null ? JSONObject.NULL : val);
     }
     return obj;
-  }
-
-  private static Object canonicalize(Object v) {
-    if (v == null) {
-      return JSONObject.NULL;
-    }
-    if (v instanceof byte[]) {
-      return "0x" + bytesToHex((byte[]) v);
-    }
-    if (v instanceof ByteBuffer) {
-      ByteBuffer bb = ((ByteBuffer) v).duplicate();
-      byte[] bytes = new byte[bb.remaining()];
-      bb.get(bytes);
-      return "0x" + bytesToHex(bytes);
-    }
-    if (v instanceof Number || v instanceof Boolean || v instanceof String) {
-      return v;
-    }
-    return v.toString();
-  }
-
-  private static String bytesToHex(byte[] bytes) {
-    char[] hex = "0123456789abcdef".toCharArray();
-    char[] out = new char[bytes.length * 2];
-    for (int i = 0; i < bytes.length; i++) {
-      int b = bytes[i] & 0xff;
-      out[i * 2] = hex[b >>> 4];
-      out[i * 2 + 1] = hex[b & 0x0f];
-    }
-    return new String(out);
   }
 
   private static JSONObject describeError(Throwable error) {

@@ -21,6 +21,7 @@ import com.google.cloud.teleport.metadata.TemplateCategory;
 import com.google.cloud.teleport.v2.common.UncaughtExceptionLogger;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
+import com.google.cloud.teleport.v2.templates.model.GeneratedRecord;
 import com.google.cloud.teleport.v2.templates.model.SchemaConfig;
 import com.google.cloud.teleport.v2.templates.transforms.BatchAndWrite;
 import com.google.cloud.teleport.v2.templates.transforms.GeneratePrimaryKey;
@@ -126,19 +127,19 @@ public class DataGenerator {
 
     // Reshuffle based on Hash(TableName + PK) to ensure same PK goes to same worker
     // Key = Hash(TableName + PK) % 5000
-    PCollection<KV<String, Row>> reshuffledRows =
+    PCollection<KV<Integer, GeneratedRecord>> reshuffledRows =
         pendingRows
             .apply(
                 "MapToReshuffleKey",
                 ParDo.of(
-                    new DoFn<KV<String, Row>, KV<String, Row>>() {
+                    new DoFn<KV<String, Row>, KV<Integer, GeneratedRecord>>() {
                       @ProcessElement
                       public void processElement(ProcessContext c) {
                         String tableName = c.element().getKey();
                         Row pkValues = c.element().getValue();
                         int hash = (tableName + pkValues.toString()).hashCode();
                         int shard = Math.abs(hash % 5000);
-                        c.output(KV.of(tableName + "#" + shard, pkValues));
+                        c.output(KV.of(shard, GeneratedRecord.create(tableName, pkValues)));
                       }
                     }))
             .apply("Reshuffle", Reshuffle.of());

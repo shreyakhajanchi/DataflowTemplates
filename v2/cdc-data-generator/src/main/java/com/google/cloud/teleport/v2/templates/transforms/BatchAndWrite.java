@@ -18,6 +18,7 @@ package com.google.cloud.teleport.v2.templates.transforms;
 import com.google.cloud.teleport.v2.templates.DataGeneratorOptions.SinkType;
 import com.google.cloud.teleport.v2.templates.dofn.BatchAndWriteFn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
+import com.google.cloud.teleport.v2.templates.model.GeneratedRecord;
 import com.google.cloud.teleport.v2.templates.utils.FailureRecord;
 import org.apache.beam.sdk.coders.StringUtf8Coder;
 import org.apache.beam.sdk.transforms.PTransform;
@@ -25,7 +26,6 @@ import org.apache.beam.sdk.transforms.ParDo;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionView;
-import org.apache.beam.sdk.values.Row;
 
 /**
  * {@link PTransform} that takes a stream of partially-generated keyed rows, completes them,
@@ -40,7 +40,8 @@ import org.apache.beam.sdk.values.Row;
  * <p>The actual work is delegated to {@link BatchAndWriteFn}; this transform exists so callers can
  * apply one named PTransform without having to wire up the {@link ParDo} and side input.
  */
-public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PCollection<String>> {
+public class BatchAndWrite
+    extends PTransform<PCollection<KV<Integer, GeneratedRecord>>, PCollection<String>> {
 
   private final SinkType sinkType;
   private final String sinkOptionsPath;
@@ -78,7 +79,7 @@ public class BatchAndWrite extends PTransform<PCollection<KV<String, Row>>, PCol
   }
 
   @Override
-  public PCollection<String> expand(PCollection<KV<String, Row>> input) {
+  public PCollection<String> expand(PCollection<KV<Integer, GeneratedRecord>> input) {
     return input
         .apply(
             "BatchAndWriteFn",

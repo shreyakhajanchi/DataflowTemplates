@@ -21,11 +21,13 @@ import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -158,11 +160,14 @@ public class SchemaUtils {
     return DataGeneratorSchema.builder().tables(newTablesBuilder.buildOrThrow()).build();
   }
 
-  private static List<DataGeneratorTable> sortTopologically(
-      List<DataGeneratorTable> tables, Map<String, DataGeneratorTable> allTables) {
+  public static List<DataGeneratorTable> sortTopologically(
+      Collection<DataGeneratorTable> tables, Map<String, DataGeneratorTable> allTables) {
     List<DataGeneratorTable> sortedInput = new ArrayList<>(tables);
-    // Fallback to QPS sort for independent nodes to maintain test stability
-    sortedInput.sort(java.util.Comparator.comparingInt(DataGeneratorTable::insertQps));
+    sortedInput.sort(
+        java.util.Comparator.comparing(
+                DataGeneratorTable::isRoot, java.util.Comparator.reverseOrder())
+            .thenComparingInt(DataGeneratorTable::insertQps)
+            .thenComparing(DataGeneratorTable::name));
 
     List<DataGeneratorTable> sorted = new ArrayList<>();
     Set<String> visited = new HashSet<>();
@@ -170,13 +175,13 @@ public class SchemaUtils {
 
     for (DataGeneratorTable table : sortedInput) {
       if (!visited.contains(table.name())) {
-        dfs(table, allTables, visited, visiting, sorted, sortedInput);
+        dfsGeneralized(table, allTables, visited, visiting, sorted, sortedInput);
       }
     }
     return sorted;
   }
 
-  private static void dfs(
+  private static void dfsGeneralized(
       DataGeneratorTable table,
       Map<String, DataGeneratorTable> allTables,
       Set<String> visited,
@@ -184,22 +189,44 @@ public class SchemaUtils {
       List<DataGeneratorTable> sorted,
       List<DataGeneratorTable> subset) {
     visiting.add(table.name());
+
+    List<String> parentNames = new ArrayList<>();
+    if (table.interleavedInTable() != null) {
+      parentNames.add(table.interleavedInTable());
+    }
     for (DataGeneratorForeignKey fk : table.foreignKeys()) {
-      String refTable = fk.referencedTable();
-      // Only consider dependencies among the subset of tables we are sorting!
+      parentNames.add(fk.referencedTable());
+    }
+
+    for (String refTable : parentNames) {
       if (subset.stream().anyMatch(t -> t.name().equals(refTable))) {
         DataGeneratorTable parent = allTables.get(refTable);
         if (parent != null && !visited.contains(refTable)) {
           if (visiting.contains(refTable)) {
             throw new IllegalStateException(
-                "Circular dependency detected among parents involving " + refTable);
+                "Circular dependency detected in schema involving table: " + refTable);
           }
-          dfs(parent, allTables, visited, visiting, sorted, subset);
+          dfsGeneralized(parent, allTables, visited, visiting, sorted, subset);
         }
       }
     }
+
     visiting.remove(table.name());
     visited.add(table.name());
     sorted.add(table);
+  }
+
+  public static List<String> buildInsertTopoOrder(DataGeneratorSchema schema) {
+    List<DataGeneratorTable> sortedTables =
+        sortTopologically(schema.tables().values(), schema.tables());
+    return sortedTables.stream().map(DataGeneratorTable::name).collect(Collectors.toList());
+  }
+
+  public static Map<String, Integer> buildTopoIndex(List<String> topoOrder) {
+    Map<String, Integer> index = new HashMap<>();
+    for (int i = 0; i < topoOrder.size(); i++) {
+      index.put(topoOrder.get(i), i);
+    }
+    return index;
   }
 }

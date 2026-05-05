@@ -64,7 +64,8 @@ public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions,
       order = 4,
       optional = true,
       description = "Batch Size",
-      helpText = "The batch size for writing to the sink. Default is 100.")
+      helpText =
+          "The batch size for writing to the sink. Crucially, this threshold is evaluated per table (partitioned by table name, shard, and operation type). Default is 100.")
   @Default.Integer(100)
   Integer getBatchSize();
 

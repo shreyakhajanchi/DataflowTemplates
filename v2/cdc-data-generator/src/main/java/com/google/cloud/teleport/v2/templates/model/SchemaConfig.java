@@ -81,14 +81,14 @@ public class SchemaConfig implements Serializable {
   }
 
   public static class ColumnConfig implements Serializable {
-    private String generator;
+    private Object generator;
     private Boolean skip;
 
-    public String getGenerator() {
+    public Object getGenerator() {
       return generator;
     }
 
-    public void setGenerator(String generator) {
+    public void setGenerator(Object generator) {
       this.generator = generator;
     }
 

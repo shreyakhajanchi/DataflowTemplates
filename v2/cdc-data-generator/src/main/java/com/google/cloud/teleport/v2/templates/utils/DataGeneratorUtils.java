@@ -15,14 +15,20 @@
  */
 package com.google.cloud.teleport.v2.templates.utils;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
 import com.google.common.annotations.VisibleForTesting;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import org.apache.beam.sdk.schemas.Schema;
 import org.joda.time.Instant;
 
@@ -56,8 +62,25 @@ public final class DataGeneratorUtils {
     LogicalType type = column.logicalType();
     Long size = column.size();
 
-    if (column.generator() != null && !column.generator().isEmpty()) {
-      return generateFromExpression(column, faker);
+    if (column.generator() != null) {
+      Object override = column.generator();
+      if (override instanceof String) {
+        String expr = (String) override;
+        if (!expr.isEmpty()) {
+          return generateFromStringExpression(expr, column, faker);
+        }
+      } else if (type == LogicalType.JSON) {
+        try {
+          Object resolvedTree = resolveJsonTemplateNode(override, faker);
+          return new ObjectMapper().writeValueAsString(resolvedTree);
+        } catch (Exception e) {
+          throw new RuntimeException(
+              "Failed to serialize rich nested JSON override for column " + column.name(), e);
+        }
+      } else {
+        throw new IllegalArgumentException(
+            "Unsupported rich nested override for non-JSON column '" + column.name() + "'.");
+      }
     }
 
     switch (type) {
@@ -258,8 +281,38 @@ public final class DataGeneratorUtils {
    * <p>For ENUM and ARRAY logical types we fall back to the random generator — the user-facing
    * conversion contract for those is fuzzier and the randomised path is type-safe by construction.
    */
-  static Object generateFromExpression(DataGeneratorColumn column, Faker faker) {
-    String expression = column.generator();
+  private static Object resolveJsonTemplateNode(Object node, Faker faker) {
+    if (node instanceof Map) {
+      Map<String, Object> srcMap = (Map<String, Object>) node;
+      Map<String, Object> resolvedMap = new LinkedHashMap<>();
+      for (Map.Entry<String, Object> entry : srcMap.entrySet()) {
+        resolvedMap.put(entry.getKey(), resolveJsonTemplateNode(entry.getValue(), faker));
+      }
+      return resolvedMap;
+    }
+
+    if (node instanceof List) {
+      List<Object> srcList = (List<Object>) node;
+      List<Object> resolvedList = new ArrayList<>();
+      for (Object item : srcList) {
+        resolvedList.add(resolveJsonTemplateNode(item, faker));
+      }
+      return resolvedList;
+    }
+
+    if (node instanceof String) {
+      String str = (String) node;
+      if (str.contains("#{")) {
+        return faker.expression(str);
+      }
+      return str;
+    }
+
+    return node;
+  }
+
+  static Object generateFromStringExpression(
+      String expression, DataGeneratorColumn column, Faker faker) {
     if (!expression.startsWith("#{")) {
       return convertToLogicalType(expression, column); // Treat as literal
     }
@@ -330,5 +383,35 @@ public final class DataGeneratorUtils {
               + "'",
           e);
     }
+  }
+
+  public static Object canonicalizeValue(Object v) {
+    if (v == null) {
+      return null;
+    }
+    if (v instanceof byte[]) {
+      return "0x" + bytesToHex((byte[]) v);
+    }
+    if (v instanceof ByteBuffer) {
+      ByteBuffer bb = ((ByteBuffer) v).duplicate();
+      byte[] bytes = new byte[bb.remaining()];
+      bb.get(bytes);
+      return "0x" + bytesToHex(bytes);
+    }
+    if (v instanceof Number || v instanceof Boolean || v instanceof String) {
+      return v;
+    }
+    return v.toString();
+  }
+
+  public static String bytesToHex(byte[] bytes) {
+    char[] hex = "0123456789abcdef".toCharArray();
+    char[] out = new char[bytes.length * 2];
+    for (int i = 0; i < bytes.length; i++) {
+      int b = bytes[i] & 0xff;
+      out[i * 2] = hex[b >>> 4];
+      out[i * 2 + 1] = hex[b & 0x0f];
+    }
+    return new String(out);
   }
 }

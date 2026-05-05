@@ -62,8 +62,8 @@ public class RowAssemblerTest {
     assertThat(pk).containsEntry("b", 2L);
   }
 
-  @Test
-  public void pkValuesOf_skipsPkColumnsAbsentFromRow() {
+  @Test(expected = IllegalArgumentException.class)
+  public void pkValuesOf_throwsWhenPkColumnAbsentFromRow() {
     DataGeneratorTable table =
         baseTable("Users", ImmutableList.of("a", "b"))
             .columns(ImmutableList.of(intColumn("a"), intColumn("b")))
@@ -71,8 +71,7 @@ public class RowAssemblerTest {
     Schema rowSchema = Schema.builder().addInt64Field("a").build();
     Row row = Row.withSchema(rowSchema).addValue(1L).build();
 
-    LinkedHashMap<String, Object> pk = RowAssembler.pkValuesOf(row, table);
-    assertThat(pk.keySet()).containsExactly("a");
+    RowAssembler.pkValuesOf(row, table);
   }
 
   @Test
@@ -388,7 +387,7 @@ public class RowAssemblerTest {
             .build();
     Schema schema = Schema.builder().addInt64Field("id").addStringField("name").build();
     Row complete = Row.withSchema(schema).addValues(1L, "Alice").build();
-    Row result = RowAssembler.completeRow(table, complete, /* shardIdHint= */ "", faker);
+    Row result = RowAssembler.completeRow(table, complete, faker);
     assertThat((Long) result.getValue("id")).isEqualTo(1L);
     assertThat(result.getString("name")).isEqualTo("Alice");
   }
@@ -401,20 +400,21 @@ public class RowAssemblerTest {
             .build();
     Schema partialSchema = Schema.builder().addInt64Field("id").build();
     Row partial = Row.withSchema(partialSchema).addValue(7L).build();
-    Row full = RowAssembler.completeRow(table, partial, "", faker);
+    Row full = RowAssembler.completeRow(table, partial, faker);
     assertThat((Long) full.getValue("id")).isEqualTo(7L);
     assertThat(full.getString("name")).isNotNull();
   }
 
   @Test
-  public void completeRow_addsShardIdFromHintWhenAbsent() {
+  public void completeRow_preservesShardIdWhenPresent() {
     DataGeneratorTable table =
         baseTable("T", ImmutableList.of("id"))
             .columns(ImmutableList.of(intColumn("id"), stringColumn("name", false)))
             .build();
-    Schema partialSchema = Schema.builder().addInt64Field("id").build();
-    Row partial = Row.withSchema(partialSchema).addValue(1L).build();
-    Row full = RowAssembler.completeRow(table, partial, "shardX", faker);
+    Schema partialSchema =
+        Schema.builder().addInt64Field("id").addStringField(Constants.SHARD_ID_COLUMN_NAME).build();
+    Row partial = Row.withSchema(partialSchema).addValues(1L, "shardX").build();
+    Row full = RowAssembler.completeRow(table, partial, faker);
     assertThat(full.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)).isTrue();
     assertThat(full.getString(Constants.SHARD_ID_COLUMN_NAME)).isEqualTo("shardX");
   }
@@ -440,7 +440,7 @@ public class RowAssemblerTest {
             .build();
     Schema partialSchema = Schema.builder().addInt64Field("id").build();
     Row partial = Row.withSchema(partialSchema).addValue(1L).build();
-    Row full = RowAssembler.completeRow(table, partial, "", faker);
+    Row full = RowAssembler.completeRow(table, partial, faker);
     assertThat(full.getSchema().hasField("ghost")).isFalse();
   }
 

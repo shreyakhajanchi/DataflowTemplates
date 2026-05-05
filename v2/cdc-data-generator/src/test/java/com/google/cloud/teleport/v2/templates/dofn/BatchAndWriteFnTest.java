@@ -22,6 +22,7 @@ import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
+import com.google.cloud.teleport.v2.templates.model.GeneratedRecord;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
 import com.google.cloud.teleport.v2.templates.sink.DataWriter;
 import com.google.common.collect.ImmutableList;
@@ -59,61 +60,6 @@ public class BatchAndWriteFnTest implements Serializable {
   public void resetRecorder() {
     RecordingDataWriter.reset();
     FailingDataWriter.reset();
-  }
-
-  // ===========================================================================
-  // buildInsertTopoOrder
-  // ===========================================================================
-
-  @Test
-  public void buildInsertTopoOrder_rootsBeforeChildren() {
-    DataGeneratorTable parent =
-        tableBuilder("Parent", /* isRoot= */ true).childTables(ImmutableList.of("Child")).build();
-    DataGeneratorTable child = tableBuilder("Child", /* isRoot= */ false).build();
-
-    DataGeneratorSchema schema =
-        DataGeneratorSchema.builder()
-            .tables(ImmutableMap.of("Parent", parent, "Child", child))
-            .build();
-
-    List<String> order = BatchAndWriteFn.buildInsertTopoOrder(schema);
-    assertThat(order).containsExactly("Parent", "Child").inOrder();
-  }
-
-  @Test
-  public void buildInsertTopoOrder_multipleRoots_sortedByName() {
-    DataGeneratorSchema schema =
-        DataGeneratorSchema.builder()
-            .tables(
-                ImmutableMap.of(
-                    "B", tableBuilder("B", /* isRoot= */ true).build(),
-                    "A", tableBuilder("A", /* isRoot= */ true).build(),
-                    "C", tableBuilder("C", /* isRoot= */ true).build()))
-            .build();
-
-    List<String> order = BatchAndWriteFn.buildInsertTopoOrder(schema);
-    assertThat(order).containsExactly("A", "B", "C").inOrder();
-  }
-
-  @Test
-  public void buildInsertTopoOrder_appendsUnreachableTables() {
-    DataGeneratorSchema schema =
-        DataGeneratorSchema.builder()
-            .tables(
-                ImmutableMap.of(
-                    "Root", tableBuilder("Root", /* isRoot= */ true).build(),
-                    "Orphan", tableBuilder("Orphan", /* isRoot= */ false).build()))
-            .build();
-
-    List<String> order = BatchAndWriteFn.buildInsertTopoOrder(schema);
-    assertThat(order).containsExactly("Root", "Orphan").inOrder();
-  }
-
-  @Test
-  public void buildInsertTopoOrder_emptySchema_returnsEmpty() {
-    DataGeneratorSchema schema = DataGeneratorSchema.builder().tables(ImmutableMap.of()).build();
-
-    assertThat(BatchAndWriteFn.buildInsertTopoOrder(schema)).isEmpty();
   }
 
   // ===========================================================================
@@ -155,7 +101,7 @@ public class BatchAndWriteFnTest implements Serializable {
     Row row = Row.withSchema(rowSchema).addValue(1L).build();
 
     pipeline
-        .apply("Input", Create.of(KV.of("Users#0", row)))
+        .apply("Input", Create.of(KV.of(0, GeneratedRecord.create("Users", row))))
         .apply(
             "BatchAndWrite",
             ParDo.of(new RecordingBatchAndWriteFn(SinkType.SPANNER, "{}", 1, schemaView))
@@ -181,7 +127,7 @@ public class BatchAndWriteFnTest implements Serializable {
     Row row = Row.withSchema(rowSchema).addValue(1L).build();
 
     pipeline
-        .apply("Input", Create.of(KV.of("MissingTable#0", row)))
+        .apply("Input", Create.of(KV.of(0, GeneratedRecord.create("MissingTable", row))))
         .apply(
             "BatchAndWrite",
             ParDo.of(new RecordingBatchAndWriteFn(SinkType.SPANNER, "{}", 1, schemaView))
@@ -250,7 +196,7 @@ public class BatchAndWriteFnTest implements Serializable {
     Row userRow = Row.withSchema(rowSchema).addValues(1L, "Alice").build();
 
     pipeline
-        .apply("Input", Create.of(KV.of("Users#0", userRow)))
+        .apply("Input", Create.of(KV.of(0, GeneratedRecord.create("Users", userRow))))
         .apply(
             "BatchAndWrite",
             ParDo.of(new RecordingBatchAndWriteFn(SinkType.SPANNER, "{}", 1, schemaView))
@@ -283,7 +229,7 @@ public class BatchAndWriteFnTest implements Serializable {
 
     PCollection<String> dlq =
         pipeline
-            .apply("Input", Create.of(KV.of("Users#0", row)))
+            .apply("Input", Create.of(KV.of(0, GeneratedRecord.create("Users", row))))
             .apply(
                 "BatchAndWrite",
                 ParDo.of(new FailingBatchAndWriteFn(SinkType.SPANNER, "{}", 1, schemaView))
@@ -358,7 +304,7 @@ public class BatchAndWriteFnTest implements Serializable {
     Row parentRow = Row.withSchema(rowSchema).addValues(1L, "Alice").build();
 
     pipeline
-        .apply("Input", Create.of(KV.of("Parent#0", parentRow)))
+        .apply("Input", Create.of(KV.of(0, GeneratedRecord.create("Parent", parentRow))))
         .apply(
             "BatchAndWrite",
             ParDo.of(new RecordingBatchAndWriteFn(SinkType.SPANNER, "{}", 1, schemaView))

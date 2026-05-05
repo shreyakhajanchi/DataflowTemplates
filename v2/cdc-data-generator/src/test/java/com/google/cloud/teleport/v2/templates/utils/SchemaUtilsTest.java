@@ -24,6 +24,7 @@ import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import java.util.List;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -417,5 +418,85 @@ public class SchemaUtilsTest {
     // EmployeeAssignments should have Projects as child
     assertEquals(1, newEmp.childTables().size());
     assertEquals("Projects", newEmp.childTables().get(0));
+  }
+
+  @Test
+  public void testBuildInsertTopoOrderRootsBeforeChildren() {
+    DataGeneratorTable parent =
+        DataGeneratorTable.builder()
+            .name("Parent")
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .insertQps(1)
+            .isRoot(true)
+            .childTables(ImmutableList.of("Child"))
+            .build();
+    DataGeneratorTable child =
+        DataGeneratorTable.builder()
+            .name("Child")
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .insertQps(1)
+            .isRoot(false)
+            .build();
+
+    DataGeneratorSchema schema =
+        DataGeneratorSchema.builder()
+            .tables(ImmutableMap.of("Parent", parent, "Child", child))
+            .build();
+
+    List<String> order = SchemaUtils.buildInsertTopoOrder(schema);
+    assertEquals(2, order.size());
+    assertEquals("Parent", order.get(0));
+    assertEquals("Child", order.get(1));
+  }
+
+  @Test
+  public void testBuildInsertTopoOrderMultipleRootsSortedByName() {
+    DataGeneratorSchema schema =
+        DataGeneratorSchema.builder()
+            .tables(
+                ImmutableMap.of(
+                    "B",
+                    DataGeneratorTable.builder()
+                        .name("B")
+                        .columns(ImmutableList.of())
+                        .primaryKeys(ImmutableList.of())
+                        .foreignKeys(ImmutableList.of())
+                        .uniqueKeys(ImmutableList.of())
+                        .insertQps(1)
+                        .isRoot(true)
+                        .build(),
+                    "A",
+                    DataGeneratorTable.builder()
+                        .name("A")
+                        .columns(ImmutableList.of())
+                        .primaryKeys(ImmutableList.of())
+                        .foreignKeys(ImmutableList.of())
+                        .uniqueKeys(ImmutableList.of())
+                        .insertQps(1)
+                        .isRoot(true)
+                        .build(),
+                    "C",
+                    DataGeneratorTable.builder()
+                        .name("C")
+                        .columns(ImmutableList.of())
+                        .primaryKeys(ImmutableList.of())
+                        .foreignKeys(ImmutableList.of())
+                        .uniqueKeys(ImmutableList.of())
+                        .insertQps(1)
+                        .isRoot(true)
+                        .build()))
+            .build();
+
+    List<String> order = SchemaUtils.buildInsertTopoOrder(schema);
+    assertEquals(3, order.size());
+    assertEquals("A", order.get(0));
+    assertEquals("B", order.get(1));
+    assertEquals("C", order.get(2));
   }
 }

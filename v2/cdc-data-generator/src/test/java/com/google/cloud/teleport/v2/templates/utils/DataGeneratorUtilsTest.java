@@ -15,11 +15,15 @@
  */
 package com.google.cloud.teleport.v2.templates.utils;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.javafaker.Faker;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.joda.time.Instant;
 import org.junit.Assert;
 import org.junit.Test;
@@ -127,7 +131,7 @@ public class DataGeneratorUtilsTest {
   }
 
   @Test
-  public void testGenerateFromExpression_FakerExpression() {
+  public void testGenerateFromStringExpression_FakerExpression() {
     DataGeneratorColumn column =
         DataGeneratorColumn.builder()
             .name("name_col")
@@ -139,13 +143,13 @@ public class DataGeneratorUtilsTest {
             .generator("#{name.fullName}")
             .build();
 
-    Object value = DataGeneratorUtils.generateFromExpression(column, faker);
+    Object value = DataGeneratorUtils.generateValue(column, faker);
     Assert.assertTrue(value instanceof String);
     Assert.assertFalse(((String) value).isEmpty());
   }
 
   @Test
-  public void testGenerateFromExpression_LiteralString() {
+  public void testGenerateFromStringExpression_LiteralString() {
     DataGeneratorColumn column =
         DataGeneratorColumn.builder()
             .name("const_col")
@@ -157,12 +161,12 @@ public class DataGeneratorUtilsTest {
             .generator("fixed_value")
             .build();
 
-    Object value = DataGeneratorUtils.generateFromExpression(column, faker);
+    Object value = DataGeneratorUtils.generateValue(column, faker);
     Assert.assertEquals("fixed_value", value);
   }
 
   @Test
-  public void testGenerateFromExpression_LiteralInteger() {
+  public void testGenerateFromStringExpression_LiteralInteger() {
     DataGeneratorColumn column =
         DataGeneratorColumn.builder()
             .name("const_int_col")
@@ -174,7 +178,40 @@ public class DataGeneratorUtilsTest {
             .generator("12345")
             .build();
 
-    Object value = DataGeneratorUtils.generateFromExpression(column, faker);
+    Object value = DataGeneratorUtils.generateValue(column, faker);
     Assert.assertEquals(12345L, value);
+  }
+
+  @Test
+  public void testGenerateValue_RichNestedJsonOverride() throws Exception {
+    Map<String, Object> inner = new LinkedHashMap<>();
+    inner.put("email", "#{internet.emailAddress}");
+    inner.put("theme", "dark");
+
+    Map<String, Object> schemaMap = new LinkedHashMap<>();
+    schemaMap.put("id", 999L);
+    schemaMap.put("name", "#{name.fullName}");
+    schemaMap.put("prefs", inner);
+
+    DataGeneratorColumn colJson =
+        DataGeneratorColumn.builder()
+            .name("rich_json")
+            .logicalType(LogicalType.JSON)
+            .isNullable(false)
+            .isPrimaryKey(false)
+            .isGenerated(false)
+            .originalType("JSON")
+            .generator(schemaMap)
+            .build();
+
+    Object result = DataGeneratorUtils.generateValue(colJson, faker);
+    Assert.assertTrue(result instanceof String);
+    String jsonStr = (String) result;
+
+    JsonNode node = new ObjectMapper().readTree(jsonStr);
+    Assert.assertEquals(999, node.get("id").asInt());
+    Assert.assertFalse(node.get("name").asText().isEmpty());
+    Assert.assertEquals("dark", node.get("prefs").get("theme").asText());
+    Assert.assertTrue(node.get("prefs").get("email").asText().contains("@"));
   }
 }
