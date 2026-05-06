@@ -147,8 +147,8 @@ public final class DataGeneratorUtils {
         }
       case TIMESTAMP:
         {
-          long minMillis = -30610224000000L; // Year 1000
-          long maxMillis = 253402300799000L; // Year 9999
+          long minMillis = 157766400000L; // Year 1975
+          long maxMillis = 2051222400000L; // Year 2035
           return new Instant(
               java.util.concurrent.ThreadLocalRandom.current().nextLong(minMillis, maxMillis));
         }

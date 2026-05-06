@@ -86,4 +86,81 @@ public class DataGeneratorEngineTest {
 
     assertNotNull(engine);
   }
+
+  @Test(expected = IllegalStateException.class)
+  public void testProcessRecord_throwsExceptionWhenFkColumnCasingMismatches() {
+    DataGeneratorEngine engine = new DataGeneratorEngine(5, 5, new Faker());
+
+    com.google.cloud.teleport.v2.templates.model.DataGeneratorTable parentTable =
+        com.google.cloud.teleport.v2.templates.model.DataGeneratorTable.builder()
+            .name("Parent")
+            .columns(
+                ImmutableList.of(
+                    com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn.builder()
+                        .name("deptCode") // defined in lowercase camelCase
+                        .logicalType(
+                            com.google.cloud.teleport.v2.templates.model.LogicalType.STRING)
+                        .build()))
+            .primaryKeys(ImmutableList.of("deptCode"))
+            .insertQps(10)
+            .isRoot(true)
+            .childTables(ImmutableList.of("Child"))
+            .build();
+
+    com.google.cloud.teleport.v2.templates.model.DataGeneratorTable childTable =
+        com.google.cloud.teleport.v2.templates.model.DataGeneratorTable.builder()
+            .name("Child")
+            .columns(
+                ImmutableList.of(
+                    com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn.builder()
+                        .name("DeptCode") // FK column matching field name
+                        .logicalType(
+                            com.google.cloud.teleport.v2.templates.model.LogicalType.STRING)
+                        .build()))
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(
+                ImmutableList.of(
+                    com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey.builder()
+                        .name("fk_dept")
+                        .keyColumns(ImmutableList.of("DeptCode"))
+                        .referencedTable("Parent")
+                        .referencedColumns(
+                            ImmutableList.of(
+                                "DeptCode")) // Mismatched Case: "DeptCode" vs "deptCode"
+                        .build()))
+            .insertQps(10)
+            .isRoot(false)
+            .build();
+
+    DataGeneratorSchema schema =
+        DataGeneratorSchema.builder()
+            .tables(ImmutableMap.of("Parent", parentTable, "Child", childTable))
+            .build();
+
+    MapState<String, Row> mockActiveKeys = mock(MapState.class);
+    ReadableState<Row> mockReadableState = mock(ReadableState.class);
+    when(mockReadableState.read()).thenReturn(null); // No collision
+    when(mockActiveKeys.get(any())).thenReturn(mockReadableState);
+
+    Row mockRow = mock(Row.class);
+    org.apache.beam.sdk.schemas.Schema parentSchema =
+        org.apache.beam.sdk.schemas.Schema.builder()
+            .addField(
+                org.apache.beam.sdk.schemas.Schema.Field.of(
+                    "deptCode", org.apache.beam.sdk.schemas.Schema.FieldType.STRING))
+            .build();
+    when(mockRow.getSchema()).thenReturn(parentSchema);
+    when(mockRow.getValue("deptCode")).thenReturn("HR");
+
+    engine.processRecord(
+        "Parent",
+        mockRow,
+        mockActiveKeys,
+        mock(MapState.class),
+        mock(org.apache.beam.sdk.state.ValueState.class),
+        mock(MapState.class),
+        mock(org.apache.beam.sdk.state.Timer.class),
+        schema,
+        mock(MutationBatcher.class));
+  }
 }

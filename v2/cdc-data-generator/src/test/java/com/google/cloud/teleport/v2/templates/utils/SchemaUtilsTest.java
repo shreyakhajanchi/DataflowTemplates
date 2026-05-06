@@ -499,4 +499,68 @@ public class SchemaUtilsTest {
     assertEquals("B", order.get(1));
     assertEquals("C", order.get(2));
   }
+
+  @Test
+  public void testSetSchemaDAG_overridesChildDeleteQpsWhenAncestorHasDeletes() {
+    // Grandparent (deleteQps = 5) -> Parent (deleteQps = 0) -> Child (deleteQps = 10)
+    DataGeneratorTable grandparent =
+        DataGeneratorTable.builder()
+            .name("Grandparent")
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(ImmutableList.of())
+            .uniqueKeys(ImmutableList.of())
+            .insertQps(10)
+            .deleteQps(5)
+            .build();
+
+    DataGeneratorTable parent =
+        DataGeneratorTable.builder()
+            .name("Parent")
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(
+                ImmutableList.of(
+                    DataGeneratorForeignKey.builder()
+                        .name("fk_gp")
+                        .keyColumns(ImmutableList.of("gpId"))
+                        .referencedTable("Grandparent")
+                        .referencedColumns(ImmutableList.of("id"))
+                        .build()))
+            .uniqueKeys(ImmutableList.of())
+            .insertQps(10)
+            .deleteQps(0)
+            .build();
+
+    DataGeneratorTable child =
+        DataGeneratorTable.builder()
+            .name("Child")
+            .columns(ImmutableList.of())
+            .primaryKeys(ImmutableList.of())
+            .foreignKeys(
+                ImmutableList.of(
+                    DataGeneratorForeignKey.builder()
+                        .name("fk_parent")
+                        .keyColumns(ImmutableList.of("parentId"))
+                        .referencedTable("Parent")
+                        .referencedColumns(ImmutableList.of("id"))
+                        .build()))
+            .uniqueKeys(ImmutableList.of())
+            .insertQps(10)
+            .deleteQps(10)
+            .build();
+
+    DataGeneratorSchema schema =
+        DataGeneratorSchema.builder()
+            .tables(ImmutableMap.of("Grandparent", grandparent, "Parent", parent, "Child", child))
+            .build();
+
+    DataGeneratorSchema dagSchema = SchemaUtils.setSchemaDAG(schema);
+
+    assertEquals(Integer.valueOf(5), dagSchema.tables().get("Grandparent").deleteQps());
+    assertEquals(Integer.valueOf(0), dagSchema.tables().get("Parent").deleteQps());
+    assertEquals(
+        Integer.valueOf(0),
+        dagSchema.tables().get("Child").deleteQps()); // Overwritten due to grandparent!
+  }
 }

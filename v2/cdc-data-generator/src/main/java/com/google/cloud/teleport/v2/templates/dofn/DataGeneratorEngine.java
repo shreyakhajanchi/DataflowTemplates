@@ -363,8 +363,15 @@ public class DataGeneratorEngine implements Serializable {
           break;
         }
         for (int i = 0; i < fk.keyColumns().size(); i++) {
-          columnValues.put(
-              fk.keyColumns().get(i), getFieldFromRow(source, fk.referencedColumns().get(i)));
+          String refCol = fk.referencedColumns().get(i);
+          if (!source.getSchema().hasField(refCol)) {
+            throw new IllegalStateException(
+                String.format(
+                    "Foreign key constraint '%s' references column '%s' on table '%s', but that column does not exist in the generated parent row schema. "
+                        + "Available fields in parent schema: %s. Please verify column name spelling and letter-casing.",
+                    fk.name(), refCol, fk.referencedTable(), source.getSchema().getFieldNames()));
+          }
+          columnValues.put(fk.keyColumns().get(i), source.getValue(refCol));
         }
       }
     }
@@ -391,8 +398,10 @@ public class DataGeneratorEngine implements Serializable {
       if (col.skip()) {
         continue;
       }
-      Object val = columnValues.get(col.name());
-      if (val == null) {
+      Object val;
+      if (columnValues.containsKey(col.name())) {
+        val = columnValues.get(col.name());
+      } else {
         val = DataGeneratorUtils.generateValue(col, faker);
       }
       schemaBuilder.addField(

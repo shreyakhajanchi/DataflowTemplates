@@ -139,6 +139,10 @@ public class SchemaUtils {
       boolean isRoot = !hasSequenceParent.contains(tableName);
       int depth = depthMap.getOrDefault(tableName, 0);
 
+      boolean hasAncestorDelete =
+          hasPhysicalAncestorWithDeleteQps(table, tableMap, new java.util.HashSet<>());
+      Integer finalDeleteQps = hasAncestorDelete ? Integer.valueOf(0) : table.deleteQps();
+
       newTablesBuilder.put(
           tableName,
           table.toBuilder()
@@ -147,6 +151,7 @@ public class SchemaUtils {
                       sequenceChildren)) // These are tables to generate AFTER this one
               .isRoot(isRoot)
               .depth(depth)
+              .deleteQps(finalDeleteQps)
               .build());
 
       if (isRoot) {
@@ -158,6 +163,41 @@ public class SchemaUtils {
     }
 
     return DataGeneratorSchema.builder().tables(newTablesBuilder.buildOrThrow()).build();
+  }
+
+  private static boolean hasPhysicalAncestorWithDeleteQps(
+      DataGeneratorTable table,
+      Map<String, DataGeneratorTable> tableMap,
+      java.util.Set<String> visited) {
+    if (table == null || !visited.add(table.name())) {
+      return false;
+    }
+    if (table.interleavedInTable() != null) {
+      DataGeneratorTable p = tableMap.get(table.interleavedInTable());
+      if (p != null) {
+        if (p.deleteQps() != null && p.deleteQps() > 0) {
+          return true;
+        }
+        if (hasPhysicalAncestorWithDeleteQps(p, tableMap, visited)) {
+          return true;
+        }
+      }
+    }
+    if (table.foreignKeys() != null) {
+      for (com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey fk :
+          table.foreignKeys()) {
+        DataGeneratorTable p = tableMap.get(fk.referencedTable());
+        if (p != null) {
+          if (p.deleteQps() != null && p.deleteQps() > 0) {
+            return true;
+          }
+          if (hasPhysicalAncestorWithDeleteQps(p, tableMap, visited)) {
+            return true;
+          }
+        }
+      }
+    }
+    return false;
   }
 
   public static List<DataGeneratorTable> sortTopologically(
