@@ -1,0 +1,20 @@
+[
+  {
+    "user": "root",
+    "password": "pass123",
+    "host": "10.36.112.199",
+    "port": "3306",
+    "dbName": "scale_test1",
+    "logicalShardId": "shard0",
+    "connectionProperties": "rewriteBatchedStatements=true"
+  },
+  {
+    "user": "root",
+    "password": "pass123",
+    "host": "10.36.112.199",
+    "port": "3306",
+    "dbName": "scale_test2",
+    "logicalShardId": "shard1",
+    "connectionProperties": "rewriteBatchedStatements=true"
+  }
+]

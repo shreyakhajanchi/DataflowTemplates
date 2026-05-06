@@ -48,23 +48,14 @@ import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionView;
 import org.apache.beam.sdk.values.Row;
 
-@Template(
-    name = "Data_Generator",
-    category = TemplateCategory.STREAMING,
-    displayName = "Data Generator",
-    description = "A template to generate synthetic data based on a source schema.",
-    optionsClass = DataGeneratorOptions.class,
-    flexContainerName = "data-generator",
-    contactInformation = "https://cloud.google.com/support",
-    streaming = true,
-    supportsAtLeastOnce = true)
+@Template(name = "Data_Generator", category = TemplateCategory.STREAMING, displayName = "Data Generator", description = "A template to generate synthetic data based on a source schema.", optionsClass = DataGeneratorOptions.class, flexContainerName = "data-generator", contactInformation = "https://cloud.google.com/support", streaming = true, supportsAtLeastOnce = true)
 public class DataGenerator {
 
   public static void main(String[] args) {
     UncaughtExceptionLogger.register();
 
-    DataGeneratorOptions options =
-        PipelineOptionsFactory.fromArgs(args).withValidation().as(DataGeneratorOptions.class);
+    DataGeneratorOptions options = PipelineOptionsFactory.fromArgs(args).withValidation()
+        .as(DataGeneratorOptions.class);
     options.setStreaming(true);
     run(options);
   }
@@ -72,7 +63,8 @@ public class DataGenerator {
   public static PipelineResult run(DataGeneratorOptions options) {
     Pipeline pipeline = Pipeline.create(options);
 
-    // Register SerializableCoder for Row class globally since we use dynamically constructed
+    // Register SerializableCoder for Row class globally since we use dynamically
+    // constructed
     // schemas at runtime
     pipeline
         .getCoderRegistry()
@@ -81,10 +73,9 @@ public class DataGenerator {
 
     SchemaConfig schemaConfig = null;
     if (options.getSchemaConfig() != null && !options.getSchemaConfig().isEmpty()) {
-      try (ReadableByteChannel channel =
-          FileSystems.open(FileSystems.matchNewResource(options.getSchemaConfig(), false))) {
-        try (Reader reader =
-            new InputStreamReader(Channels.newInputStream(channel), StandardCharsets.UTF_8)) {
+      try (ReadableByteChannel channel = FileSystems
+          .open(FileSystems.matchNewResource(options.getSchemaConfig(), false))) {
+        try (Reader reader = new InputStreamReader(Channels.newInputStream(channel), StandardCharsets.UTF_8)) {
           String content = CharStreams.toString(reader);
           ObjectMapper mapper = new ObjectMapper(new HoconFactory());
           schemaConfig = mapper.readValue(content, SchemaConfig.class);
@@ -95,66 +86,61 @@ public class DataGenerator {
       }
     }
 
-    PCollectionView<DataGeneratorSchema> schemaView =
-        pipeline.apply(
-            "LoadSchema",
-            new SchemaLoader(
-                options.getSinkType(),
-                options.getSinkOptions(),
-                options.getInsertQps(),
-                options.getUpdateQps(),
-                options.getDeleteQps(),
-                schemaConfig));
+    PCollectionView<DataGeneratorSchema> schemaView = pipeline.apply(
+        "LoadSchema",
+        new SchemaLoader(
+            options.getSinkType(),
+            options.getSinkOptions(),
+            options.getInsertQps(),
+            options.getUpdateQps(),
+            options.getDeleteQps(),
+            schemaConfig));
 
     // Generate ticks based on schema QPS
-    PCollection<DataGeneratorTable> ticks =
-        pipeline
-            .apply(
-                "TriggerTick",
-                org.apache.beam.sdk.transforms.PeriodicImpulse.create()
-                    .withInterval(org.joda.time.Duration.standardSeconds(1)))
-            .apply("GenerateTicks", new GenerateTicks(schemaView))
-            .apply("ReshuffleProvider", org.apache.beam.sdk.transforms.Reshuffle.viaRandomKey())
-            .apply("SelectTable", new SelectTable(schemaView));
+    PCollection<DataGeneratorTable> ticks = pipeline
+        .apply(
+            "TriggerTick",
+            org.apache.beam.sdk.transforms.PeriodicImpulse.create()
+                .withInterval(org.joda.time.Duration.standardSeconds(1)))
+        .apply("GenerateTicks", new GenerateTicks(schemaView))
+        .apply("ReshuffleProvider", org.apache.beam.sdk.transforms.Reshuffle.viaRandomKey())
+        .apply("SelectTable", new SelectTable(schemaView));
 
     // Generate Primary Keys
     int maxShards = options.getMaxShards() != null ? options.getMaxShards() : 1;
-    PCollection<KV<String, Row>> pendingRows =
-        ticks.apply(
-            "GeneratePrimaryKey",
-            new GeneratePrimaryKey(
-                maxShards, options.getSinkOptions(), options.getSinkType().name()));
+    PCollection<KV<String, Row>> pendingRows = ticks.apply(
+        "GeneratePrimaryKey",
+        new GeneratePrimaryKey(
+            maxShards, options.getSinkOptions(), options.getSinkType().name()));
 
     // Reshuffle based on Hash(TableName + PK) to ensure same PK goes to same worker
     // Key = Hash(TableName + PK) % 5000
-    PCollection<KV<Integer, GeneratedRecord>> reshuffledRows =
-        pendingRows
-            .apply(
-                "MapToReshuffleKey",
-                ParDo.of(
-                    new DoFn<KV<String, Row>, KV<Integer, GeneratedRecord>>() {
-                      @ProcessElement
-                      public void processElement(ProcessContext c) {
-                        String tableName = c.element().getKey();
-                        Row pkValues = c.element().getValue();
-                        int hash = (tableName + pkValues.toString()).hashCode();
-                        int shard = Math.abs(hash % 5000);
-                        c.output(KV.of(shard, GeneratedRecord.create(tableName, pkValues)));
-                      }
-                    }))
-            .apply("Reshuffle", Reshuffle.of());
+    PCollection<KV<Integer, GeneratedRecord>> reshuffledRows = pendingRows
+        .apply(
+            "MapToReshuffleKey",
+            ParDo.of(
+                new DoFn<KV<String, Row>, KV<Integer, GeneratedRecord>>() {
+                  @ProcessElement
+                  public void processElement(ProcessContext c) {
+                    String tableName = c.element().getKey();
+                    Row pkValues = c.element().getValue();
+                    int hash = (tableName + pkValues.toString()).hashCode();
+                    int shard = Math.abs(hash % 5000)
+                    c.output(KV.of(shard, GeneratedRecord.create(tableName, pkValues)));
+                  }
+                }))
+        .apply("Reshuffle", Reshuffle.of());
 
-    PCollection<String> dlqRecords =
-        reshuffledRows.apply(
-            "BatchAndWrite",
-            new BatchAndWrite(
-                options.getSinkType(),
-                options.getSinkOptions(),
-                options.getBatchSize(),
-                options.getJdbcPoolSize(),
-                options.getUpdateInterval(),
-                options.getDeleteInterval(),
-                schemaView));
+    PCollection<String> dlqRecords = reshuffledRows.apply(
+        "BatchAndWrite",
+        new BatchAndWrite(
+            options.getSinkType(),
+            options.getSinkOptions(),
+            options.getBatchSize(),
+            options.getJdbcPoolSize(),
+            options.getUpdateInterval(),
+            options.getDeleteInterval(),
+            schemaView));
 
     if (options.getDlqDirectory() != null && !options.getDlqDirectory().isEmpty()) {
       dlqRecords.apply(
@@ -162,6 +148,7 @@ public class DataGenerator {
           com.google.cloud.teleport.v2.transforms.DLQWriteTransform.WriteDLQ.newBuilder()
               .withDlqDirectory(options.getDlqDirectory())
               .withTmpDirectory(options.getDlqDirectory() + "/tmp")
+              .setIncludePaneInfo(true)
               .build());
     }
 
