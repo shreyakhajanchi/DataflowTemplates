@@ -15,16 +15,26 @@
  */
 package com.google.cloud.teleport.v2.templates.dofn;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.model.SchemaConfig;
+import com.google.common.io.CharStreams;
+import com.jasonclawson.jackson.dataformat.hocon.HoconFactory;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.beam.sdk.io.FileSystems;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,20 +43,39 @@ import org.slf4j.LoggerFactory;
 public class ApplyOverridesFn extends DoFn<DataGeneratorSchema, DataGeneratorSchema> {
   private static final Logger LOG = LoggerFactory.getLogger(ApplyOverridesFn.class);
 
-  private final SchemaConfig schemaConfig;
+  private final String schemaConfigPath;
   private final int defaultInsertQps;
   private final int defaultUpdateQps;
   private final int defaultDeleteQps;
 
+  private transient SchemaConfig schemaConfig;
+
   public ApplyOverridesFn(
-      SchemaConfig schemaConfig,
+      String schemaConfigPath,
       Integer defaultInsertQps,
       Integer defaultUpdateQps,
       Integer defaultDeleteQps) {
-    this.schemaConfig = schemaConfig;
+    this.schemaConfigPath = schemaConfigPath;
     this.defaultInsertQps = defaultInsertQps != null ? defaultInsertQps : 1000;
     this.defaultUpdateQps = defaultUpdateQps != null ? defaultUpdateQps : 0;
     this.defaultDeleteQps = defaultDeleteQps != null ? defaultDeleteQps : 0;
+  }
+
+  @Setup
+  public void setup() {
+    if (schemaConfigPath != null && !schemaConfigPath.isEmpty()) {
+      try (ReadableByteChannel channel =
+          FileSystems.open(FileSystems.matchNewResource(schemaConfigPath, false))) {
+        try (Reader reader =
+            new InputStreamReader(Channels.newInputStream(channel), StandardCharsets.UTF_8)) {
+          String content = CharStreams.toString(reader);
+          ObjectMapper mapper = new ObjectMapper(new HoconFactory());
+          this.schemaConfig = mapper.readValue(content, SchemaConfig.class);
+        }
+      } catch (IOException e) {
+        throw new RuntimeException("Failed to read schema config from " + schemaConfigPath, e);
+      }
+    }
   }
 
   @ProcessElement
@@ -137,6 +166,9 @@ public class ApplyOverridesFn extends DoFn<DataGeneratorSchema, DataGeneratorSch
 
   private com.google.common.collect.ImmutableList<DataGeneratorForeignKey> mergeForeignKeys(
       DataGeneratorTable existingTable, List<SchemaConfig.ForeignKeyConfig> fkList) {
+    // Use LinkedHashMap to preserve the discovered schema's physical foreign key insertion order.
+    // This guarantees that downstream DFS graph traversals (SchemaUtils.dfsGeneralized) remain
+    // 100% deterministic and reproducible across cluster worker node restarts and unit tests.
     LinkedHashMap<String, DataGeneratorForeignKey> byName = new LinkedHashMap<>();
     for (DataGeneratorForeignKey fk : existingTable.foreignKeys()) {
       byName.put(fk.name(), fk);
