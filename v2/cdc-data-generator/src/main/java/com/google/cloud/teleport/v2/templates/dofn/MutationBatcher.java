@@ -20,7 +20,6 @@ import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.sink.DataWriter;
 import com.google.cloud.teleport.v2.templates.utils.Constants;
 import com.google.cloud.teleport.v2.templates.utils.FailureRecord;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -41,7 +40,7 @@ import org.slf4j.LoggerFactory;
  * type). This prevents large tables from starving smaller ones or forcing premature cross-table
  * flushes, ensuring maximum throughput and proper database transactional sizing.
  */
-public class MutationBatcher implements Serializable {
+public class MutationBatcher {
   private static final Logger LOG = LoggerFactory.getLogger(MutationBatcher.class);
 
   private final int batchSize;

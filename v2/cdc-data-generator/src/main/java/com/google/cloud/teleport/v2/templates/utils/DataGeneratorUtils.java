@@ -16,7 +16,6 @@
 package com.google.cloud.teleport.v2.templates.utils;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.javafaker.Faker;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
 import com.google.common.annotations.VisibleForTesting;
@@ -25,12 +24,15 @@ import java.math.RoundingMode;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Calendar;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import net.datafaker.Faker;
 import org.apache.beam.sdk.schemas.Schema;
 import org.joda.time.Instant;
+import org.json.JSONObject;
 
 /**
  * Common utilities for data generation — value synthesis and Beam type mapping.
@@ -87,30 +89,24 @@ public final class DataGeneratorUtils {
       case STRING:
         return faker.lorem().characters(clampStringLength(size));
       case JSON:
-        return "{"
-            + "\"id\": "
-            + faker.number().randomNumber()
-            + ", "
-            + "\"name\": \""
-            + faker.name().fullName()
-            + "\", "
-            + "\"isActive\": "
-            + faker.bool().bool()
-            + ", "
-            + "\"score\": "
-            + faker.number().randomDouble(2, 0, 100)
-            + ", "
-            + "\"tags\": [\""
-            + faker.lorem().word()
-            + "\", \""
-            + faker.lorem().word()
-            + "\"], "
-            + "\"address\": {\"city\": \""
-            + faker.address().city()
-            + "\", \"zip\": \""
-            + faker.address().zipCode()
-            + "\"}"
-            + "}";
+        {
+          Map<String, Object> jsonMap = new LinkedHashMap<>();
+          jsonMap.put("id", faker.number().randomNumber());
+          jsonMap.put("name", faker.name().fullName());
+          jsonMap.put("isActive", faker.bool().bool());
+          jsonMap.put("score", faker.number().randomDouble(2, 0, 100));
+          jsonMap.put("tags", java.util.List.of(faker.lorem().word(), faker.lorem().word()));
+          Map<String, Object> address = new LinkedHashMap<>();
+          address.put("city", faker.address().city());
+          address.put("zip", faker.address().zipCode());
+          jsonMap.put("address", address);
+
+          try {
+            return new ObjectMapper().writeValueAsString(jsonMap);
+          } catch (Exception e) {
+            throw new RuntimeException("Failed to generate JSON for column " + column.name(), e);
+          }
+        }
       case UUID:
         return java.util.UUID.randomUUID().toString();
       case INT64:
@@ -387,31 +383,22 @@ public final class DataGeneratorUtils {
 
   public static Object canonicalizeValue(Object v) {
     if (v == null) {
-      return null;
+      return JSONObject.NULL;
     }
-    if (v instanceof byte[]) {
-      return "0x" + bytesToHex((byte[]) v);
-    }
-    if (v instanceof ByteBuffer) {
-      ByteBuffer bb = ((ByteBuffer) v).duplicate();
-      byte[] bytes = new byte[bb.remaining()];
-      bb.get(bytes);
-      return "0x" + bytesToHex(bytes);
-    }
-    if (v instanceof Number || v instanceof Boolean || v instanceof String) {
-      return v;
-    }
-    return v.toString();
-  }
 
-  public static String bytesToHex(byte[] bytes) {
-    char[] hex = "0123456789abcdef".toCharArray();
-    char[] out = new char[bytes.length * 2];
-    for (int i = 0; i < bytes.length; i++) {
-      int b = bytes[i] & 0xff;
-      out[i * 2] = hex[b >>> 4];
-      out[i * 2 + 1] = hex[b & 0x0f];
+    // Convert byte[] to standard Base64 string
+    if (v instanceof byte[] bytes) {
+      return Base64.getEncoder().encodeToString(bytes);
     }
-    return new String(out);
+
+    // Safely extract bytes from ByteBuffer and convert to Base64
+    if (v instanceof ByteBuffer bb) {
+      ByteBuffer duplicate = bb.duplicate();
+      byte[] bytes = new byte[duplicate.remaining()];
+      duplicate.get(bytes);
+      return Base64.getEncoder().encodeToString(bytes);
+    }
+
+    return JSONObject.wrap(v);
   }
 }

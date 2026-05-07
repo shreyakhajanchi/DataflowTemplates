@@ -15,7 +15,6 @@
  */
 package com.google.cloud.teleport.v2.templates.dofn;
 
-import com.github.javafaker.Faker;
 import com.google.cloud.teleport.v2.spanner.migrations.shard.Shard;
 import com.google.cloud.teleport.v2.spanner.migrations.utils.SecretManagerAccessorImpl;
 import com.google.cloud.teleport.v2.spanner.migrations.utils.ShardFileReader;
@@ -34,6 +33,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
+import net.datafaker.Faker;
 import org.apache.beam.sdk.coders.ListCoder;
 import org.apache.beam.sdk.coders.SerializableCoder;
 import org.apache.beam.sdk.coders.StringUtf8Coder;
@@ -83,10 +83,6 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
 
   private transient DataGeneratorEngine engine;
   private transient MutationBatcher batcher;
-
-  @StateId("activeKeys")
-  private final StateSpec<MapState<String, Row>> activeKeysSpec =
-      StateSpecs.map(StringUtf8Coder.of(), SerializableCoder.of(Row.class));
 
   @StateId("eventQueue")
   private final StateSpec<MapState<Long, List<LifecycleEvent>>> eventQueueSpec =
@@ -165,7 +161,6 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
   @ProcessElement
   public void processElement(
       ProcessContext c,
-      @StateId("activeKeys") MapState<String, Row> activeKeys,
       @StateId("eventQueue") MapState<Long, List<LifecycleEvent>> eventQueueState,
       @StateId("activeTimestamps") ValueState<List<Long>> activeTimestamps,
       @StateId("tableMapState") MapState<String, DataGeneratorTable> tableMapState,
@@ -181,7 +176,6 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
       engine.processRecord(
           tableName,
           pkValues,
-          activeKeys,
           eventQueueState,
           activeTimestamps,
           tableMapState,
@@ -204,14 +198,12 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
   @OnTimer("eventTimer")
   public void onTimer(
       OnTimerContext c,
-      @StateId("activeKeys") MapState<String, Row> activeKeys,
       @StateId("eventQueue") MapState<Long, List<LifecycleEvent>> eventQueueState,
       @StateId("activeTimestamps") ValueState<List<Long>> activeTimestamps,
       @StateId("tableMapState") MapState<String, DataGeneratorTable> tableMapState,
       @TimerId("eventTimer") Timer eventTimer) {
 
     engine.processScheduledEvents(
-        activeKeys,
         eventQueueState,
         activeTimestamps,
         tableMapState,

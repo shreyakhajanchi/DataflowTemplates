@@ -15,7 +15,6 @@
  */
 package com.google.cloud.teleport.v2.templates.dofn;
 
-import com.github.javafaker.Faker;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
@@ -33,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
+import net.datafaker.Faker;
 import org.apache.beam.sdk.metrics.Counter;
 import org.apache.beam.sdk.metrics.Metrics;
 import org.apache.beam.sdk.schemas.Schema;
@@ -77,7 +77,6 @@ public class DataGeneratorEngine implements Serializable {
   public void processRecord(
       String tableName,
       Row row,
-      MapState<String, Row> activeKeys,
       MapState<Long, List<LifecycleEvent>> eventQueueState,
       ValueState<List<Long>> activeTimestamps,
       MapState<String, DataGeneratorTable> tableMapState,
@@ -100,20 +99,9 @@ public class DataGeneratorEngine implements Serializable {
 
     tableMapState.put(tableName, table);
 
-    LinkedHashMap<String, Object> pkMap = RowAssembler.pkValuesOf(row, table);
-    if (!pkMap.isEmpty()) {
-      String stateKey = RowAssembler.stateKeyOf(tableName, pkMap);
-      Row existing = activeKeys.get(stateKey).read();
-      if (existing != null) {
-        LOG.info("Collision/retry detected for key {}; skipping to maintain integrity.", stateKey);
-        return;
-      }
-    }
-
     processTable(
         table,
         row,
-        activeKeys,
         eventQueueState,
         activeTimestamps,
         tableMapState,
@@ -125,7 +113,6 @@ public class DataGeneratorEngine implements Serializable {
   }
 
   public void processScheduledEvents(
-      MapState<String, Row> activeKeys,
       MapState<Long, List<LifecycleEvent>> eventQueueState,
       ValueState<List<Long>> activeTimestamps,
       MapState<String, DataGeneratorTable> tableMapState,
@@ -148,7 +135,7 @@ public class DataGeneratorEngine implements Serializable {
       if (events != null) {
         for (LifecycleEvent event : orderEventsForTick(events, tableMapState)) {
           try {
-            processEvent(event, activeKeys, tableMapState, batcher);
+            processEvent(event, tableMapState, batcher);
           } catch (Exception genError) {
             LOG.error(
                 "Lifecycle event generation failed for table {} ({})",
@@ -174,7 +161,6 @@ public class DataGeneratorEngine implements Serializable {
   private void processTable(
       DataGeneratorTable table,
       Row row,
-      MapState<String, Row> activeKeys,
       MapState<Long, List<LifecycleEvent>> eventQueueState,
       ValueState<List<Long>> activeTimestamps,
       MapState<String, DataGeneratorTable> tableMapState,
@@ -194,9 +180,10 @@ public class DataGeneratorEngine implements Serializable {
             : "shard0";
     insertsGenerated.inc();
     LinkedHashMap<String, Object> pkMap = RowAssembler.pkValuesOf(fullRow, table);
+
+    Row reducedRow = null;
     if (!pkMap.isEmpty()) {
-      activeKeys.put(
-          RowAssembler.stateKeyOf(tableName, pkMap), RowAssembler.createReducedRow(fullRow, table));
+      reducedRow = RowAssembler.createReducedRow(fullRow, table);
     }
 
     batcher.bufferRow(
@@ -266,7 +253,6 @@ public class DataGeneratorEngine implements Serializable {
             table,
             fullRow,
             childTable,
-            activeKeys,
             eventQueueState,
             activeTimestamps,
             tableMapState,
@@ -282,7 +268,7 @@ public class DataGeneratorEngine implements Serializable {
       for (int i = 1; i <= numUpdates; i++) {
         scheduleEvent(
             now + upInterval * i,
-            new LifecycleEvent(pkMap, Constants.MUTATION_UPDATE, tableName),
+            new LifecycleEvent(pkMap, Constants.MUTATION_UPDATE, tableName, reducedRow),
             eventQueueState,
             activeTimestamps,
             eventTimer);
@@ -290,7 +276,7 @@ public class DataGeneratorEngine implements Serializable {
       if (deleteTimestamp > 0) {
         scheduleEvent(
             deleteTimestamp,
-            new LifecycleEvent(pkMap, Constants.MUTATION_DELETE, tableName),
+            new LifecycleEvent(pkMap, Constants.MUTATION_DELETE, tableName, reducedRow),
             eventQueueState,
             activeTimestamps,
             eventTimer);
@@ -302,7 +288,6 @@ public class DataGeneratorEngine implements Serializable {
       DataGeneratorTable parentTable,
       Row parentRow,
       DataGeneratorTable childTable,
-      MapState<String, Row> activeKeys,
       MapState<Long, List<LifecycleEvent>> eventQueueState,
       ValueState<List<Long>> activeTimestamps,
       MapState<String, DataGeneratorTable> tableMapState,
@@ -329,7 +314,6 @@ public class DataGeneratorEngine implements Serializable {
       processTable(
           childTable,
           childRow,
-          activeKeys,
           eventQueueState,
           activeTimestamps,
           tableMapState,
@@ -495,28 +479,26 @@ public class DataGeneratorEngine implements Serializable {
 
   private void processEvent(
       LifecycleEvent event,
-      MapState<String, Row> activeKeys,
       MapState<String, DataGeneratorTable> tableMapState,
       MutationBatcher batcher)
       throws Exception {
-
-    String stateKey = RowAssembler.stateKeyOf(event.tableName, event.pkValues);
-    Row originalRow = activeKeys.get(stateKey).read();
-    if (originalRow == null) {
-      return;
-    }
 
     DataGeneratorTable table = tableMapState.get(event.tableName).read();
     if (table == null) {
       return;
     }
 
-    String shardId =
-        originalRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)
-            ? originalRow.getString(Constants.SHARD_ID_COLUMN_NAME)
-            : "";
+    Row originalRow = event.reducedRow;
+    String shardId = "";
+    if (originalRow != null && originalRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)) {
+      shardId = originalRow.getString(Constants.SHARD_ID_COLUMN_NAME);
+    }
 
     if (Constants.MUTATION_UPDATE.equals(event.type)) {
+      if (originalRow == null) {
+        LOG.warn("Cannot process update for table {} without original row state.", event.tableName);
+        return;
+      }
       Row updateRow = RowAssembler.generateUpdateRow(event.pkValues, table, originalRow, faker);
       batcher.bufferRow(
           event.tableName, updateRow, Constants.MUTATION_UPDATE, table, shardId, insertTopoOrder);
@@ -526,7 +508,6 @@ public class DataGeneratorEngine implements Serializable {
       batcher.bufferRow(
           event.tableName, deleteRow, Constants.MUTATION_DELETE, table, shardId, insertTopoOrder);
       deletesGenerated.inc();
-      activeKeys.remove(stateKey);
     }
   }
 }

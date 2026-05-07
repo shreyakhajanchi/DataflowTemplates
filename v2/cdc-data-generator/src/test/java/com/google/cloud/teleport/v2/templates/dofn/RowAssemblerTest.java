@@ -17,7 +17,6 @@ package com.google.cloud.teleport.v2.templates.dofn;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import com.github.javafaker.Faker;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
@@ -29,6 +28,7 @@ import java.nio.ByteBuffer;
 import java.util.LinkedHashMap;
 import java.util.Random;
 import java.util.Set;
+import net.datafaker.Faker;
 import org.apache.beam.sdk.schemas.Schema;
 import org.apache.beam.sdk.values.Row;
 import org.junit.Test;
@@ -104,10 +104,10 @@ public class RowAssemblerTest {
   }
 
   @Test
-  public void stateKeyOf_byteArrayPk_canonicalisesToHex() {
+  public void stateKeyOf_byteArrayPk_canonicalisesToBase64() {
     LinkedHashMap<String, Object> pk = new LinkedHashMap<>();
     pk.put("id", new byte[] {0x00, 0x0a, (byte) 0xff});
-    assertThat(RowAssembler.stateKeyOf("T", pk)).isEqualTo("T:0x000aff");
+    assertThat(RowAssembler.stateKeyOf("T", pk)).isEqualTo("T:AAr/");
   }
 
   @Test
@@ -123,10 +123,10 @@ public class RowAssemblerTest {
   }
 
   @Test
-  public void stateKeyOf_byteBufferPk_canonicalisesToHex() {
+  public void stateKeyOf_byteBufferPk_canonicalisesToBase64() {
     LinkedHashMap<String, Object> pk = new LinkedHashMap<>();
     pk.put("id", ByteBuffer.wrap(new byte[] {1, 2, 3}));
-    assertThat(RowAssembler.stateKeyOf("T", pk)).isEqualTo("T:0x010203");
+    assertThat(RowAssembler.stateKeyOf("T", pk)).isEqualTo("T:AQID");
   }
 
   @Test

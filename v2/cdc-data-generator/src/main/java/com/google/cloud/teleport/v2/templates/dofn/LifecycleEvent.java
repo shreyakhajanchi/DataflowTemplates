@@ -19,6 +19,7 @@ import java.io.Serializable;
 import java.util.LinkedHashMap;
 import org.apache.beam.sdk.coders.DefaultCoder;
 import org.apache.beam.sdk.coders.SerializableCoder;
+import org.apache.beam.sdk.values.Row;
 
 /**
  * A lifecycle event (UPDATE or DELETE) scheduled against a previously-inserted row.
@@ -35,6 +36,7 @@ public class LifecycleEvent implements Serializable {
   public LinkedHashMap<String, Object> pkValues;
   public String type;
   public String tableName;
+  public Row reducedRow;
 
   public LifecycleEvent() {}
 
@@ -42,5 +44,13 @@ public class LifecycleEvent implements Serializable {
     this.pkValues = pkValues;
     this.type = type;
     this.tableName = tableName;
+  }
+
+  public LifecycleEvent(
+      LinkedHashMap<String, Object> pkValues, String type, String tableName, Row reducedRow) {
+    this.pkValues = pkValues;
+    this.type = type;
+    this.tableName = tableName;
+    this.reducedRow = reducedRow;
   }
 }
