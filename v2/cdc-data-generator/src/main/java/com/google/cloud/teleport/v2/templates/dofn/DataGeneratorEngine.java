@@ -23,10 +23,8 @@ import com.google.cloud.teleport.v2.templates.utils.Constants;
 import com.google.cloud.teleport.v2.templates.utils.DataGeneratorUtils;
 import com.google.cloud.teleport.v2.templates.utils.FailureRecord;
 import com.google.cloud.teleport.v2.templates.utils.SchemaUtils;
-import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -48,7 +46,7 @@ import org.slf4j.LoggerFactory;
  * Orchestrates schema tree traversal and synthesized value updates, scheduling lifecycle timer
  * events to match operational distribution patterns.
  */
-public class DataGeneratorEngine implements Serializable {
+public class DataGeneratorEngine {
   private static final Logger LOG = LoggerFactory.getLogger(DataGeneratorEngine.class);
 
   private final Integer updateInterval;
@@ -57,7 +55,6 @@ public class DataGeneratorEngine implements Serializable {
 
   private transient volatile DataGeneratorSchema schema;
   private transient volatile List<String> insertTopoOrder;
-  private transient volatile Map<String, Integer> topoIndex;
 
   private final Counter insertsGenerated =
       Metrics.counter(DataGeneratorEngine.class, "insertsGenerated");
@@ -74,6 +71,10 @@ public class DataGeneratorEngine implements Serializable {
     this.faker = faker;
   }
 
+  /**
+   * Processes an initial root record from the data generator source, initializing topological
+   * orders, buffering the row, and cascading down to child tables.
+   */
   public void processRecord(
       String tableName,
       Row row,
@@ -87,7 +88,6 @@ public class DataGeneratorEngine implements Serializable {
     this.schema = loadedSchema;
     if (this.insertTopoOrder == null) {
       this.insertTopoOrder = SchemaUtils.buildInsertTopoOrder(loadedSchema);
-      this.topoIndex = SchemaUtils.buildTopoIndex(this.insertTopoOrder);
     }
 
     DataGeneratorTable table = schema.tables().get(tableName);
@@ -112,6 +112,10 @@ public class DataGeneratorEngine implements Serializable {
         batcher);
   }
 
+  /**
+   * Processes all scheduled future lifecycle events (updates and deletes) for active timestamps up
+   * to the current wall-clock time.
+   */
   public void processScheduledEvents(
       MapState<Long, List<LifecycleEvent>> eventQueueState,
       ValueState<List<Long>> activeTimestamps,
@@ -133,7 +137,7 @@ public class DataGeneratorEngine implements Serializable {
       }
       List<LifecycleEvent> events = eventQueueState.get(ts).read();
       if (events != null) {
-        for (LifecycleEvent event : orderEventsForTick(events, tableMapState)) {
+        for (LifecycleEvent event : events) {
           try {
             processEvent(event, tableMapState, batcher);
           } catch (Exception genError) {
@@ -158,6 +162,10 @@ public class DataGeneratorEngine implements Serializable {
     }
   }
 
+  /**
+   * Assembles and buffers an insert row for the specified table, calculates lifecycle mutation
+   * schedules, and cascades generation to its child tables.
+   */
   private void processTable(
       DataGeneratorTable table,
       Row row,
@@ -174,10 +182,7 @@ public class DataGeneratorEngine implements Serializable {
     tableMapState.put(tableName, table);
 
     Row fullRow = RowAssembler.completeRow(table, row, faker);
-    String resolvedShardId =
-        fullRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)
-            ? fullRow.getString(Constants.SHARD_ID_COLUMN_NAME)
-            : "shard0";
+    String shardId = fullRow.getString(Constants.SHARD_ID_COLUMN_NAME);
     insertsGenerated.inc();
     LinkedHashMap<String, Object> pkMap = RowAssembler.pkValuesOf(fullRow, table);
 
@@ -187,33 +192,21 @@ public class DataGeneratorEngine implements Serializable {
     }
 
     batcher.bufferRow(
-        tableName, fullRow, Constants.MUTATION_INSERT, table, resolvedShardId, insertTopoOrder);
+        tableName, fullRow, Constants.MUTATION_INSERT, table, shardId, insertTopoOrder);
 
     long now = System.currentTimeMillis();
     long deleteTimestamp = 0L;
     int numUpdates = 0;
-    long upInterval =
-        (this.updateInterval != null && this.updateInterval > 0)
-            ? (this.updateInterval * 1000L)
-            : 5000L;
-    long delInterval =
-        (this.deleteInterval != null && this.deleteInterval > 0)
-            ? (this.deleteInterval * 1000L)
-            : 5000L;
+    long upInterval = this.updateInterval;
+    long delInterval = this.deleteInterval;
 
     if (!pkMap.isEmpty()) {
       int tableInsertQps = table.insertQps();
       int tableUpdateQps = table.updateQps();
       int tableDeleteQps = table.deleteQps();
 
-      double updateRatio = tableInsertQps > 0 ? (double) tableUpdateQps / tableInsertQps : 0.0;
+      numUpdates = calculateNumUpdates(tableInsertQps, tableUpdateQps);
       double deleteRatio = tableInsertQps > 0 ? (double) tableDeleteQps / tableInsertQps : 0.0;
-
-      numUpdates = (int) updateRatio;
-      double fractionalUpdate = updateRatio - numUpdates;
-      if (ThreadLocalRandom.current().nextDouble() < fractionalUpdate) {
-        numUpdates++;
-      }
 
       if (forcedDeleteTimestamp > 0) {
         deleteTimestamp = forcedDeleteTimestamp;
@@ -226,10 +219,11 @@ public class DataGeneratorEngine implements Serializable {
       if (effectiveDeleteBound < Long.MAX_VALUE && numUpdates > 0) {
         long budget = effectiveDeleteBound - now - delInterval;
         if (upInterval * numUpdates > budget) {
-          long minIntervalMs = 10L;
-          upInterval = budget > 0 ? Math.max(minIntervalMs, budget / numUpdates) : minIntervalMs;
-          long maxUpdates = budget > 0 ? budget / upInterval : 0;
-          numUpdates = (int) Math.min(numUpdates, Math.max(0, maxUpdates));
+          if (budget < 0) {
+            upInterval = 0;
+          } else {
+            upInterval = budget / numUpdates;
+          }
         }
       }
     }
@@ -284,6 +278,10 @@ public class DataGeneratorEngine implements Serializable {
     }
   }
 
+  /**
+   * Cascades top-down row generation to child tables based on QPS ratios, inheriting referenced
+   * foreign key and interleaved parent columns.
+   */
   private void generateAndWriteChildren(
       DataGeneratorTable parentTable,
       Row parentRow,
@@ -297,19 +295,24 @@ public class DataGeneratorEngine implements Serializable {
       Map<String, Row> ancestorRows,
       MutationBatcher batcher) {
 
-    double parentQps = Math.max(1, parentTable.insertQps());
-    double childQps = childTable.insertQps();
-    double ratio = childQps / parentQps;
-    int numChildren = (int) ratio;
-    if (faker.random().nextDouble() < (ratio - numChildren)) {
-      numChildren++;
-    }
+    int numChildren = calculateNumChildren(parentTable.insertQps(), childTable.insertQps());
 
     for (int i = 0; i < numChildren; i++) {
-      Row childRow = generateChildRow(parentTable, parentRow, childTable, ancestorRows);
+      Row childRow = generateChildRow(parentRow, childTable, ancestorRows);
       if (childRow == null) {
         unresolvableFkChildrenDropped.inc();
-        continue;
+        batcher
+            .getPendingDlq()
+            .add(
+                FailureRecord.toJson(
+                    childTable.name(),
+                    FailureRecord.OPERATION_GENERATION,
+                    null,
+                    new IllegalArgumentException(
+                        String.format(
+                            "Cannot resolve structural dependency (FK/Interleave) for table: %s",
+                            childTable.name()))));
+        break;
       }
       processTable(
           childTable,
@@ -325,14 +328,14 @@ public class DataGeneratorEngine implements Serializable {
     }
   }
 
+  /**
+   * Synthesizes a single child row, resolving foreign keys and interleaved primary keys from the
+   * ancestor chain.
+   */
   private Row generateChildRow(
-      DataGeneratorTable parentTable,
-      Row parentRow,
-      DataGeneratorTable childTable,
-      Map<String, Row> ancestorRows) {
+      Row parentRow, DataGeneratorTable childTable, Map<String, Row> ancestorRows) {
 
     Map<String, Object> columnValues = new HashMap<>();
-    boolean resolvedAllFks = true;
 
     if (childTable.foreignKeys() != null && !childTable.foreignKeys().isEmpty()) {
       for (DataGeneratorForeignKey fk : childTable.foreignKeys()) {
@@ -343,32 +346,47 @@ public class DataGeneratorEngine implements Serializable {
               fk.name(),
               childTable.name(),
               fk.referencedTable());
-          resolvedAllFks = false;
-          break;
+          return null;
         }
         for (int i = 0; i < fk.keyColumns().size(); i++) {
           String refCol = fk.referencedColumns().get(i);
           if (!source.getSchema().hasField(refCol)) {
-            throw new IllegalStateException(
-                String.format(
-                    "Foreign key constraint '%s' references column '%s' on table '%s', but that column does not exist in the generated parent row schema. "
-                        + "Available fields in parent schema: %s. Please verify column name spelling and letter-casing.",
-                    fk.name(), refCol, fk.referencedTable(), source.getSchema().getFieldNames()));
+            LOG.warn(
+                "Foreign key constraint '{}' references missing column '{}' on table '{}'.",
+                fk.name(),
+                refCol,
+                fk.referencedTable());
+            return null;
           }
           columnValues.put(fk.keyColumns().get(i), source.getValue(refCol));
         }
       }
     }
-    if (!resolvedAllFks) {
-      return null;
-    }
 
-    boolean hasFks = childTable.foreignKeys() != null && !childTable.foreignKeys().isEmpty();
-    if (!hasFks
-        && childTable.interleavedInTable() != null
-        && childTable.interleavedInTable().equals(parentTable.name())) {
-      for (String pk : parentTable.primaryKeys()) {
-        Object val = getFieldFromRow(parentRow, pk);
+    if (childTable.interleavedInTable() != null) {
+      String interleavedParentName = childTable.interleavedInTable();
+      Row interleavedParentRow = ancestorRows.get(interleavedParentName);
+      DataGeneratorTable interleavedParentTable =
+          schema != null && schema.tables() != null
+              ? schema.tables().get(interleavedParentName)
+              : null;
+      if (interleavedParentRow == null || interleavedParentTable == null) {
+        LOG.warn(
+            "Cannot resolve interleaved parent table '{}' for child '{}': parent is not in the ancestor chain or schema.",
+            interleavedParentName,
+            childTable.name());
+        return null;
+      }
+      for (String pk : interleavedParentTable.primaryKeys()) {
+        if (!interleavedParentRow.getSchema().hasField(pk)) {
+          LOG.warn(
+              "Interleaved child table '{}' references missing primary key column '{}' on parent '{}'.",
+              childTable.name(),
+              pk,
+              interleavedParentName);
+          return null;
+        }
+        Object val = interleavedParentRow.getValue(pk);
         if (val != null) {
           columnValues.put(pk, val);
         }
@@ -393,26 +411,17 @@ public class DataGeneratorEngine implements Serializable {
       values.add(val);
     }
 
-    String shardId =
-        parentRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)
-            ? parentRow.getString(Constants.SHARD_ID_COLUMN_NAME)
-            : null;
-    if (shardId != null) {
-      schemaBuilder.addField(
-          Schema.Field.of(Constants.SHARD_ID_COLUMN_NAME, Schema.FieldType.STRING));
-      values.add(shardId);
-    }
+    String shardId = parentRow.getString(Constants.SHARD_ID_COLUMN_NAME);
+    schemaBuilder.addField(
+        Schema.Field.of(Constants.SHARD_ID_COLUMN_NAME, Schema.FieldType.STRING));
+    values.add(shardId);
     return Row.withSchema(schemaBuilder.build()).addValues(values).build();
   }
 
-  private Object getFieldFromRow(Row row, String fieldName) {
-    try {
-      return row.getValue(fieldName);
-    } catch (IllegalArgumentException e) {
-      return null;
-    }
-  }
-
+  /**
+   * Persists a future lifecycle event into the state queue, keeping the active timestamp list
+   * sorted via binary search.
+   */
   private void scheduleEvent(
       long timestamp,
       LifecycleEvent event,
@@ -441,42 +450,10 @@ public class DataGeneratorEngine implements Serializable {
     eventTimer.set(Instant.ofEpochMilli(timestamps.get(0)));
   }
 
-  private List<LifecycleEvent> orderEventsForTick(
-      List<LifecycleEvent> events, MapState<String, DataGeneratorTable> tableMapState) {
-    Map<String, Integer> depthCache = new HashMap<>();
-    Comparator<LifecycleEvent> cmp =
-        (a, b) -> {
-          int priA = isDelete(a) ? 1 : 0;
-          int priB = isDelete(b) ? 1 : 0;
-          if (priA != priB) {
-            return Integer.compare(priA, priB);
-          }
-          int depthA = depthCache.computeIfAbsent(a.tableName, t -> depthOf(t, tableMapState));
-          int depthB = depthCache.computeIfAbsent(b.tableName, t -> depthOf(t, tableMapState));
-          return isDelete(a) ? Integer.compare(depthB, depthA) : Integer.compare(depthA, depthB);
-        };
-    List<LifecycleEvent> copy = new ArrayList<>(events);
-    copy.sort(cmp);
-    return copy;
-  }
-
-  private boolean isDelete(LifecycleEvent e) {
-    return Constants.MUTATION_DELETE.equals(e.type);
-  }
-
-  private int depthOf(String tableName, MapState<String, DataGeneratorTable> tableMapState) {
-    if (topoIndex != null && topoIndex.containsKey(tableName)) {
-      return topoIndex.get(tableName);
-    }
-    if (schema != null && insertTopoOrder == null) {
-      insertTopoOrder = SchemaUtils.buildInsertTopoOrder(schema);
-      topoIndex = SchemaUtils.buildTopoIndex(insertTopoOrder);
-      Integer idx = topoIndex.get(tableName);
-      return idx == null ? 0 : idx;
-    }
-    return 0;
-  }
-
+  /**
+   * Executes a scheduled update or delete event by assembling the mutated row and buffering it into
+   * the batcher.
+   */
   private void processEvent(
       LifecycleEvent event,
       MapState<String, DataGeneratorTable> tableMapState,
@@ -489,16 +466,9 @@ public class DataGeneratorEngine implements Serializable {
     }
 
     Row originalRow = event.reducedRow;
-    String shardId = "";
-    if (originalRow != null && originalRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)) {
-      shardId = originalRow.getString(Constants.SHARD_ID_COLUMN_NAME);
-    }
+    String shardId = originalRow.getString(Constants.SHARD_ID_COLUMN_NAME);
 
     if (Constants.MUTATION_UPDATE.equals(event.type)) {
-      if (originalRow == null) {
-        LOG.warn("Cannot process update for table {} without original row state.", event.tableName);
-        return;
-      }
       Row updateRow = RowAssembler.generateUpdateRow(event.pkValues, table, originalRow, faker);
       batcher.bufferRow(
           event.tableName, updateRow, Constants.MUTATION_UPDATE, table, shardId, insertTopoOrder);
@@ -509,5 +479,37 @@ public class DataGeneratorEngine implements Serializable {
           event.tableName, deleteRow, Constants.MUTATION_DELETE, table, shardId, insertTopoOrder);
       deletesGenerated.inc();
     }
+  }
+
+  /**
+   * Probabilistically calculates the number of updates to generate for a single insert record based
+   * on QPS ratios.
+   */
+  private int calculateNumUpdates(int insertQps, int updateQps) {
+    if (insertQps <= 0 || updateQps <= 0) {
+      return 0;
+    }
+    double ratio = (double) updateQps / insertQps;
+    int count = (int) ratio;
+    if (ThreadLocalRandom.current().nextDouble() < (ratio - count)) {
+      count++;
+    }
+    return count;
+  }
+
+  /**
+   * Probabilistically calculates the number of child records to fan out per parent record based on
+   * QPS ratios.
+   */
+  private int calculateNumChildren(int parentInsertQps, int childInsertQps) {
+    if (parentInsertQps <= 0 || childInsertQps <= 0) {
+      return 0;
+    }
+    double ratio = (double) childInsertQps / parentInsertQps;
+    int count = (int) ratio;
+    if (faker.random().nextDouble() < (ratio - count)) {
+      count++;
+    }
+    return count;
   }
 }

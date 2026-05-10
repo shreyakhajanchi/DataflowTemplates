@@ -15,9 +15,6 @@
  */
 package com.google.cloud.teleport.v2.templates.dofn;
 
-import com.google.cloud.teleport.v2.spanner.migrations.shard.Shard;
-import com.google.cloud.teleport.v2.spanner.migrations.utils.SecretManagerAccessorImpl;
-import com.google.cloud.teleport.v2.spanner.migrations.utils.ShardFileReader;
 import com.google.cloud.teleport.v2.templates.DataGeneratorOptions.SinkType;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
@@ -28,11 +25,8 @@ import com.google.cloud.teleport.v2.templates.spanner.SpannerDataWriter;
 import com.google.cloud.teleport.v2.templates.utils.FailureRecord;
 import com.google.cloud.teleport.v2.templates.utils.SchemaUtils;
 import com.google.common.annotations.VisibleForTesting;
-import java.security.SecureRandom;
 import java.util.List;
-import java.util.Random;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
 import net.datafaker.Faker;
 import org.apache.beam.sdk.coders.ListCoder;
 import org.apache.beam.sdk.coders.SerializableCoder;
@@ -77,7 +71,6 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
 
   private transient DataWriter writer;
   private transient Faker faker;
-  private transient List<String> logicalShardIds;
   private transient volatile DataGeneratorSchema schema;
   private transient volatile List<String> insertTopoOrder;
 
@@ -122,19 +115,9 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
     this.insertTopoOrder = null;
     if (writer == null) {
       writer = createWriter(sinkType, sinkOptionsPath);
-      if (sinkType == SinkType.MYSQL) {
-        try {
-          ShardFileReader shardFileReader = new ShardFileReader(new SecretManagerAccessorImpl());
-          List<Shard> shards = shardFileReader.getOrderedShardDetails(sinkOptionsPath);
-          this.logicalShardIds =
-              shards.stream().map(Shard::getLogicalShardId).collect(Collectors.toList());
-        } catch (Exception e) {
-          throw new RuntimeException("Failed to read shards from " + sinkOptionsPath, e);
-        }
-      }
     }
     if (faker == null) {
-      faker = new Faker(new Random(new SecureRandom().nextLong()));
+      faker = new Faker();
     }
 
     this.batcher = new MutationBatcher(batchSize, jdbcPoolSize, writer);
@@ -192,7 +175,7 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
                   tableName, FailureRecord.OPERATION_GENERATION, pkValues, genError));
     }
 
-    drainBatcherDlq(c::output);
+    writeFailedRecords(c::output);
   }
 
   @OnTimer("eventTimer")
@@ -211,7 +194,7 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
         batcher,
         batcher.getPendingDlq());
 
-    drainBatcherDlq(c::output);
+    writeFailedRecords(c::output);
   }
 
   @FinishBundle
@@ -250,7 +233,7 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
     this.schema = loaded;
   }
 
-  private void drainBatcherDlq(Consumer<String> sink) {
+  private void writeFailedRecords(Consumer<String> sink) {
     List<String> dlq = batcher.getPendingDlq();
     if (dlq == null || dlq.isEmpty()) {
       return;

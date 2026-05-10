@@ -1,0 +1,21 @@
+{
+  "tables": {
+    "MyTable": {
+      "columns": {
+        "StringCol": {
+          "generator": "#{internet.emailAddress}"
+        }
+      }
+    },
+    "UserActivity": {
+      "columns": {
+        "ActivityType": {
+          "generator": "#{internet.emailAddress}"
+        },
+        "CreatedTime": {
+          "skip": true
+        }
+      }
+    }
+  }
+}

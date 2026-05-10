@@ -33,12 +33,8 @@ import org.apache.beam.sdk.values.PCollectionView;
  * op)}, and writes to the sink configured by {@code sinkType}/{@code sinkOptionsPath}.
  *
  * <p>Output is a {@code PCollection<String>} of JSON-encoded {@link FailureRecord}s — one per row
- * that could not be generated or that the sink rejected. Callers should pipe this output to a DLQ
- * sink (e.g. {@code WriteFailuresToGcs}) when a dead-letter directory is configured. The output is
- * empty when no failures occur.
- *
- * <p>The actual work is delegated to {@link BatchAndWriteFn}; this transform exists so callers can
- * apply one named PTransform without having to wire up the {@link ParDo} and side input.
+ * that could not be generated or that the sink rejected. The output is empty when no failures
+ * occur.
  */
 public class BatchAndWrite
     extends PTransform<PCollection<KV<Integer, GeneratedRecord>>, PCollection<String>> {
@@ -54,8 +50,7 @@ public class BatchAndWrite
   /**
    * @param sinkType which sink writer the underlying {@link BatchAndWriteFn} should instantiate
    * @param sinkOptionsPath path/URI to the sink-specific configuration document
-   * @param batchSize maximum rows buffered per {@code (table, shard, op)} before flush; {@code
-   *     null} or non-positive falls back to {@link BatchAndWriteFn#DEFAULT_BATCH_SIZE}
+   * @param batchSize maximum rows buffered per {@code (table, shard, op)} before flush;
    * @param jdbcPoolSize connection pool size limit per MySQL shard node
    * @param updateInterval custom UPDATE interval in seconds for lifecycle events
    * @param deleteInterval custom trailing DELETE interval in seconds for lifecycle events

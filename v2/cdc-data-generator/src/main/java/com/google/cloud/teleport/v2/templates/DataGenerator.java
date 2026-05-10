@@ -118,6 +118,17 @@ public class DataGenerator {
                     }))
             .apply("Reshuffle", Reshuffle.of());
 
+    Integer updateIntervalMs =
+        (options.getUpdateInterval() != null && options.getUpdateInterval() > 0
+                ? options.getUpdateInterval()
+                : 5)
+            * 1000;
+    Integer deleteIntervalMs =
+        (options.getDeleteInterval() != null && options.getDeleteInterval() > 0
+                ? options.getDeleteInterval()
+                : 5)
+            * 1000;
+
     PCollection<String> dlqRecords =
         reshuffledRows.apply(
             "BatchAndWrite",
@@ -126,8 +137,8 @@ public class DataGenerator {
                 options.getSinkOptions(),
                 options.getBatchSize(),
                 options.getJdbcPoolSize(),
-                options.getUpdateInterval(),
-                options.getDeleteInterval(),
+                updateIntervalMs,
+                deleteIntervalMs,
                 schemaView));
 
     if (options.getDlqDirectory() != null && !options.getDlqDirectory().isEmpty()) {

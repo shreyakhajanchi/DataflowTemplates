@@ -38,14 +38,6 @@ public class LifecycleEvent implements Serializable {
   public String tableName;
   public Row reducedRow;
 
-  public LifecycleEvent() {}
-
-  public LifecycleEvent(LinkedHashMap<String, Object> pkValues, String type, String tableName) {
-    this.pkValues = pkValues;
-    this.type = type;
-    this.tableName = tableName;
-  }
-
   public LifecycleEvent(
       LinkedHashMap<String, Object> pkValues, String type, String tableName, Row reducedRow) {
     this.pkValues = pkValues;
