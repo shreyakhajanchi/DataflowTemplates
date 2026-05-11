@@ -1,0 +1,18 @@
+[
+  {
+    "user": "root",
+    "secretManagerUri": "projects/545418958905/secrets/shreya-secret",
+    "host": "10.36.112.199",
+    "port": "3306",
+    "dbName": "dg_test",
+    "connectionProperties": "rewriteBatchedStatements=true"
+  },
+  {
+    "user": "root",
+    "secretManagerUri": "projects/545418958905/secrets/shreya-secret",
+    "host": "10.36.112.199",
+    "port": "3306",
+    "dbName": "dg_test1",
+    "connectionProperties": "rewriteBatchedStatements=true"
+  }
+]
