@@ -22,7 +22,6 @@ import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.utils.Constants;
 import com.google.cloud.teleport.v2.templates.utils.DataGeneratorUtils;
 import com.google.cloud.teleport.v2.templates.utils.FailureRecord;
-import com.google.cloud.teleport.v2.templates.utils.SchemaUtils;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -53,9 +52,6 @@ public class DataGeneratorEngine {
   private final Integer deleteInterval;
   private final Faker faker;
 
-  private transient volatile DataGeneratorSchema schema;
-  private transient volatile List<String> insertTopoOrder;
-
   private final Counter insertsGenerated =
       Metrics.counter(DataGeneratorEngine.class, "insertsGenerated");
   private final Counter updatesGenerated =
@@ -83,14 +79,10 @@ public class DataGeneratorEngine {
       MapState<String, DataGeneratorTable> tableMapState,
       Timer eventTimer,
       DataGeneratorSchema loadedSchema,
+      List<String> topoOrder,
       MutationBatcher batcher) {
 
-    this.schema = loadedSchema;
-    if (this.insertTopoOrder == null) {
-      this.insertTopoOrder = SchemaUtils.buildInsertTopoOrder(loadedSchema);
-    }
-
-    DataGeneratorTable table = schema.tables().get(tableName);
+    DataGeneratorTable table = loadedSchema.tables().get(tableName);
 
     if (table == null) {
       Metrics.counter(DataGeneratorEngine.class, "tableNotFound_" + tableName).inc();
@@ -109,6 +101,8 @@ public class DataGeneratorEngine {
         /* forcedDeleteTimestamp= */ 0L,
         /* earliestAncestorDelete= */ Long.MAX_VALUE,
         new HashMap<>(),
+        loadedSchema,
+        topoOrder,
         batcher);
   }
 
@@ -121,6 +115,7 @@ public class DataGeneratorEngine {
       ValueState<List<Long>> activeTimestamps,
       MapState<String, DataGeneratorTable> tableMapState,
       Timer eventTimer,
+      List<String> topoOrder,
       MutationBatcher batcher,
       List<String> pendingDlq) {
 
@@ -139,7 +134,7 @@ public class DataGeneratorEngine {
       if (events != null) {
         for (LifecycleEvent event : events) {
           try {
-            processEvent(event, tableMapState, batcher);
+            processEvent(event, tableMapState, topoOrder, batcher);
           } catch (Exception genError) {
             LOG.error(
                 "Lifecycle event generation failed for table {} ({})",
@@ -176,13 +171,18 @@ public class DataGeneratorEngine {
       long forcedDeleteTimestamp,
       long earliestAncestorDelete,
       Map<String, Row> ancestorRows,
+      DataGeneratorSchema loadedSchema,
+      List<String> topoOrder,
       MutationBatcher batcher) {
 
     String tableName = table.name();
     tableMapState.put(tableName, table);
 
     Row fullRow = RowAssembler.completeRow(table, row, faker);
-    String shardId = fullRow.getString(Constants.SHARD_ID_COLUMN_NAME);
+    String shardId =
+        fullRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)
+            ? fullRow.getString(Constants.SHARD_ID_COLUMN_NAME)
+            : "shard0";
     insertsGenerated.inc();
     LinkedHashMap<String, Object> pkMap = RowAssembler.pkValuesOf(fullRow, table);
 
@@ -191,14 +191,13 @@ public class DataGeneratorEngine {
       reducedRow = RowAssembler.createReducedRow(fullRow, table);
     }
 
-    batcher.bufferRow(
-        tableName, fullRow, Constants.MUTATION_INSERT, table, shardId, insertTopoOrder);
+    batcher.bufferRow(tableName, fullRow, Constants.MUTATION_INSERT, table, shardId, topoOrder);
 
     long now = System.currentTimeMillis();
     long deleteTimestamp = 0L;
     int numUpdates = 0;
-    long upInterval = this.updateInterval;
-    long delInterval = this.deleteInterval;
+    long upInterval = this.updateInterval != null ? this.updateInterval : 1000L;
+    long delInterval = this.deleteInterval != null ? this.deleteInterval : 1000L;
 
     if (!pkMap.isEmpty()) {
       int tableInsertQps = table.insertQps();
@@ -238,7 +237,7 @@ public class DataGeneratorEngine {
 
     if (table.childTables() != null) {
       for (String childTableName : table.childTables()) {
-        DataGeneratorTable childTable = schema.tables().get(childTableName);
+        DataGeneratorTable childTable = loadedSchema.tables().get(childTableName);
         if (childTable == null) {
           Metrics.counter(DataGeneratorEngine.class, "childTableNotFound_" + childTableName).inc();
           continue;
@@ -254,6 +253,8 @@ public class DataGeneratorEngine {
             deleteTimestamp,
             childEarliestAncestorDelete,
             updatedAncestorRows,
+            loadedSchema,
+            topoOrder,
             batcher);
       }
     }
@@ -293,12 +294,14 @@ public class DataGeneratorEngine {
       long forcedDeleteTimestamp,
       long earliestAncestorDelete,
       Map<String, Row> ancestorRows,
+      DataGeneratorSchema loadedSchema,
+      List<String> topoOrder,
       MutationBatcher batcher) {
 
     int numChildren = calculateNumChildren(parentTable.insertQps(), childTable.insertQps());
 
     for (int i = 0; i < numChildren; i++) {
-      Row childRow = generateChildRow(parentRow, childTable, ancestorRows);
+      Row childRow = generateChildRow(parentRow, childTable, ancestorRows, loadedSchema);
       if (childRow == null) {
         unresolvableFkChildrenDropped.inc();
         batcher
@@ -324,6 +327,8 @@ public class DataGeneratorEngine {
           forcedDeleteTimestamp,
           earliestAncestorDelete,
           ancestorRows,
+          loadedSchema,
+          topoOrder,
           batcher);
     }
   }
@@ -333,7 +338,10 @@ public class DataGeneratorEngine {
    * ancestor chain.
    */
   private Row generateChildRow(
-      Row parentRow, DataGeneratorTable childTable, Map<String, Row> ancestorRows) {
+      Row parentRow,
+      DataGeneratorTable childTable,
+      Map<String, Row> ancestorRows,
+      DataGeneratorSchema loadedSchema) {
 
     Map<String, Object> columnValues = new HashMap<>();
 
@@ -367,8 +375,8 @@ public class DataGeneratorEngine {
       String interleavedParentName = childTable.interleavedInTable();
       Row interleavedParentRow = ancestorRows.get(interleavedParentName);
       DataGeneratorTable interleavedParentTable =
-          schema != null && schema.tables() != null
-              ? schema.tables().get(interleavedParentName)
+          loadedSchema != null && loadedSchema.tables() != null
+              ? loadedSchema.tables().get(interleavedParentName)
               : null;
       if (interleavedParentRow == null || interleavedParentTable == null) {
         LOG.warn(
@@ -411,7 +419,10 @@ public class DataGeneratorEngine {
       values.add(val);
     }
 
-    String shardId = parentRow.getString(Constants.SHARD_ID_COLUMN_NAME);
+    String shardId =
+        parentRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)
+            ? parentRow.getString(Constants.SHARD_ID_COLUMN_NAME)
+            : "shard0";
     schemaBuilder.addField(
         Schema.Field.of(Constants.SHARD_ID_COLUMN_NAME, Schema.FieldType.STRING));
     values.add(shardId);
@@ -457,6 +468,7 @@ public class DataGeneratorEngine {
   private void processEvent(
       LifecycleEvent event,
       MapState<String, DataGeneratorTable> tableMapState,
+      List<String> topoOrder,
       MutationBatcher batcher)
       throws Exception {
 
@@ -466,17 +478,20 @@ public class DataGeneratorEngine {
     }
 
     Row originalRow = event.reducedRow;
-    String shardId = originalRow.getString(Constants.SHARD_ID_COLUMN_NAME);
+    String shardId =
+        (originalRow != null && originalRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME))
+            ? originalRow.getString(Constants.SHARD_ID_COLUMN_NAME)
+            : "shard0";
 
     if (Constants.MUTATION_UPDATE.equals(event.type)) {
       Row updateRow = RowAssembler.generateUpdateRow(event.pkValues, table, originalRow, faker);
       batcher.bufferRow(
-          event.tableName, updateRow, Constants.MUTATION_UPDATE, table, shardId, insertTopoOrder);
+          event.tableName, updateRow, Constants.MUTATION_UPDATE, table, shardId, topoOrder);
       updatesGenerated.inc();
     } else if (Constants.MUTATION_DELETE.equals(event.type)) {
       Row deleteRow = RowAssembler.generateDeleteRow(event.pkValues, table);
       batcher.bufferRow(
-          event.tableName, deleteRow, Constants.MUTATION_DELETE, table, shardId, insertTopoOrder);
+          event.tableName, deleteRow, Constants.MUTATION_DELETE, table, shardId, topoOrder);
       deletesGenerated.inc();
     }
   }

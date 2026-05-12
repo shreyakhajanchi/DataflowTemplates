@@ -121,6 +121,7 @@ public class DataGeneratorEngineTest {
         mock(MapState.class),
         mock(org.apache.beam.sdk.state.Timer.class),
         schema,
+        ImmutableList.of("Parent", "Child"),
         mock(MutationBatcher.class));
   }
 
@@ -137,6 +138,7 @@ public class DataGeneratorEngineTest {
         mock(MapState.class),
         mock(Timer.class),
         schema,
+        new ArrayList<>(),
         mock(MutationBatcher.class));
   }
 
@@ -230,6 +232,7 @@ public class DataGeneratorEngineTest {
         tableMapState,
         eventTimer,
         schema,
+        ImmutableList.of("Parent", "Child"),
         batcher);
 
     // 2. Ensure events were scheduled and execute scheduled events loop
@@ -241,7 +244,13 @@ public class DataGeneratorEngineTest {
       capturedEvents.add(new LifecycleEvent(pkMap, Constants.MUTATION_DELETE, "Parent", mockRow));
 
       engine.processScheduledEvents(
-          eventQueueState, activeTimestamps, tableMapState, eventTimer, batcher, new ArrayList<>());
+          eventQueueState,
+          activeTimestamps,
+          tableMapState,
+          eventTimer,
+          ImmutableList.of("Parent", "Child"),
+          batcher,
+          new ArrayList<>());
     }
   }
 
@@ -326,6 +335,7 @@ public class DataGeneratorEngineTest {
         tableMapState,
         eventTimer,
         schema,
+        ImmutableList.of("Parent", "Child"),
         batcher);
 
     Assert.assertFalse(dlq.isEmpty());
@@ -412,6 +422,7 @@ public class DataGeneratorEngineTest {
         tableMapState,
         eventTimer,
         schema,
+        ImmutableList.of("Parent", "Child"),
         batcher);
 
     Assert.assertFalse(dlq.isEmpty());
@@ -444,7 +455,13 @@ public class DataGeneratorEngineTest {
     when(batcher.getPendingDlq()).thenReturn(dlq);
 
     engine.processScheduledEvents(
-        eventQueueState, activeTimestamps, tableMapState, mock(Timer.class), batcher, dlq);
+        eventQueueState,
+        activeTimestamps,
+        tableMapState,
+        mock(Timer.class),
+        ImmutableList.of("Parent", "Child"),
+        batcher,
+        dlq);
 
     Assert.assertFalse(dlq.isEmpty());
   }
@@ -518,6 +535,7 @@ public class DataGeneratorEngineTest {
         activeTimestamps,
         tableMapState,
         mock(Timer.class),
+        ImmutableList.of("Parent"),
         batcher,
         new ArrayList<>());
   }
@@ -597,6 +615,7 @@ public class DataGeneratorEngineTest {
         tableMapState,
         eventTimer,
         schema,
+        ImmutableList.of("Parent", "Child"),
         batcher);
 
     Assert.assertFalse(dlq.isEmpty());

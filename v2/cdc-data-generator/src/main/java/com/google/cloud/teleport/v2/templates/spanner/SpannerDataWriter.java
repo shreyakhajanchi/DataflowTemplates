@@ -18,6 +18,7 @@ package com.google.cloud.teleport.v2.templates.spanner;
 import com.google.cloud.ByteArray;
 import com.google.cloud.Date;
 import com.google.cloud.Timestamp;
+import com.google.cloud.spanner.Dialect;
 import com.google.cloud.spanner.Key;
 import com.google.cloud.spanner.Mutation;
 import com.google.cloud.spanner.Value;
@@ -79,7 +80,8 @@ public class SpannerDataWriter implements DataWriter {
 
   private transient SpannerConfig spannerConfig;
   private transient SpannerAccessor spannerAccessor;
-  private transient com.google.cloud.spanner.Dialect dialect;
+  private static volatile Dialect cachedDialect;
+  private transient Dialect dialect;
 
   public SpannerDataWriter(String sinkConfigPath) {
     this(sinkConfigPath, SpannerAccessor::getOrCreate);
@@ -152,12 +154,20 @@ public class SpannerDataWriter implements DataWriter {
       spannerAccessor = accessorFactory.getOrCreate(spannerConfig);
     }
     if (dialect == null) {
-      dialect =
-          spannerAccessor
-              .getDatabaseAdminClient()
-              .getDatabase(spannerConfig.getInstanceId().get(), spannerConfig.getDatabaseId().get())
-              .getDialect();
-      LOG.info("Detected Spanner database dialect: {}", dialect);
+      if (cachedDialect == null) {
+        synchronized (SpannerDataWriter.class) {
+          if (cachedDialect == null) {
+            cachedDialect =
+                spannerAccessor
+                    .getDatabaseAdminClient()
+                    .getDatabase(
+                        spannerConfig.getInstanceId().get(), spannerConfig.getDatabaseId().get())
+                    .getDialect();
+            LOG.info("Detected Spanner database dialect: {}", cachedDialect);
+          }
+        }
+      }
+      dialect = cachedDialect;
     }
   }
 

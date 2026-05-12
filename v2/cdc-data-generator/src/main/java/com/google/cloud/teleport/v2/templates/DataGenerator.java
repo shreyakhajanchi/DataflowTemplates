@@ -31,7 +31,8 @@ import org.apache.beam.sdk.PipelineResult;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
-import org.apache.beam.sdk.transforms.Reshuffle;
+import org.apache.beam.sdk.transforms.Redistribute;
+import org.apache.beam.sdk.transforms.Values;
 import org.apache.beam.sdk.values.KV;
 import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.values.PCollectionView;
@@ -88,7 +89,18 @@ public class DataGenerator {
                 org.apache.beam.sdk.transforms.PeriodicImpulse.create()
                     .withInterval(org.joda.time.Duration.standardSeconds(1)))
             .apply("GenerateTicks", new GenerateTicks(schemaView))
-            .apply("ReshuffleProvider", org.apache.beam.sdk.transforms.Reshuffle.viaRandomKey())
+            .apply(
+                "MapToRandomKey",
+                ParDo.of(
+                    new DoFn<Long, KV<Integer, Long>>() {
+                      @ProcessElement
+                      public void processElement(ProcessContext c) {
+                        int key = java.util.concurrent.ThreadLocalRandom.current().nextInt(50000);
+                        c.output(KV.of(key, c.element()));
+                      }
+                    }))
+            .apply("RedistributeProvider", Redistribute.byKey())
+            .apply("ExtractTickValues", Values.create())
             .apply("SelectTable", new SelectTable(schemaView));
 
     // Generate Primary Keys
@@ -112,11 +124,11 @@ public class DataGenerator {
                         String tableName = c.element().getKey();
                         Row pkValues = c.element().getValue();
                         int hash = (tableName + pkValues.toString()).hashCode();
-                        int shard = Math.abs(hash % 5000);
+                        int shard = Math.abs(hash % 50000);
                         c.output(KV.of(shard, GeneratedRecord.create(tableName, pkValues)));
                       }
                     }))
-            .apply("Reshuffle", Reshuffle.of());
+            .apply("Redistribute", Redistribute.byKey());
 
     Integer updateIntervalMs =
         (options.getUpdateInterval() != null && options.getUpdateInterval() > 0

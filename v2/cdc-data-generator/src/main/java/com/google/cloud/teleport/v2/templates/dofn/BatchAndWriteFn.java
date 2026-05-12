@@ -89,6 +89,10 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
   private final StateSpec<MapState<String, DataGeneratorTable>> tableMapSpec =
       StateSpecs.map(StringUtf8Coder.of(), SerializableCoder.of(DataGeneratorTable.class));
 
+  @StateId("topoOrderState")
+  private final StateSpec<ValueState<List<String>>> topoOrderSpec =
+      StateSpecs.value(ListCoder.of(StringUtf8Coder.of()));
+
   @TimerId("eventTimer")
   private final TimerSpec eventTimerSpec = TimerSpecs.timer(TimeDomain.PROCESSING_TIME);
 
@@ -147,9 +151,10 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
       @StateId("eventQueue") MapState<Long, List<LifecycleEvent>> eventQueueState,
       @StateId("activeTimestamps") ValueState<List<Long>> activeTimestamps,
       @StateId("tableMapState") MapState<String, DataGeneratorTable> tableMapState,
+      @StateId("topoOrderState") ValueState<List<String>> topoOrderState,
       @TimerId("eventTimer") Timer eventTimer) {
 
-    ensureSchemaInitialized(c);
+    ensureSchemaInitialized(c, topoOrderState);
 
     GeneratedRecord record = c.element().getValue();
     String tableName = record.tableName();
@@ -164,6 +169,7 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
           tableMapState,
           eventTimer,
           schema,
+          insertTopoOrder,
           batcher);
     } catch (Exception genError) {
       LOG.error("Generation failed for table {}", tableName, genError);
@@ -184,13 +190,19 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
       @StateId("eventQueue") MapState<Long, List<LifecycleEvent>> eventQueueState,
       @StateId("activeTimestamps") ValueState<List<Long>> activeTimestamps,
       @StateId("tableMapState") MapState<String, DataGeneratorTable> tableMapState,
+      @StateId("topoOrderState") ValueState<List<String>> topoOrderState,
       @TimerId("eventTimer") Timer eventTimer) {
+
+    if (this.insertTopoOrder == null) {
+      this.insertTopoOrder = topoOrderState.read();
+    }
 
     engine.processScheduledEvents(
         eventQueueState,
         activeTimestamps,
         tableMapState,
         eventTimer,
+        insertTopoOrder,
         batcher,
         batcher.getPendingDlq());
 
@@ -224,13 +236,20 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
     }
   }
 
-  private void ensureSchemaInitialized(ProcessContext c) {
-    if (schema != null) {
+  private void ensureSchemaInitialized(ProcessContext c, ValueState<List<String>> topoOrderState) {
+    if (schema != null && insertTopoOrder != null) {
       return;
     }
-    DataGeneratorSchema loaded = c.sideInput(schemaView);
-    this.insertTopoOrder = SchemaUtils.buildInsertTopoOrder(loaded);
-    this.schema = loaded;
+    List<String> existingOrder = topoOrderState.read();
+    if (existingOrder != null && !existingOrder.isEmpty()) {
+      this.insertTopoOrder = existingOrder;
+    } else {
+      DataGeneratorSchema loaded = c.sideInput(schemaView);
+      List<String> order = SchemaUtils.buildInsertTopoOrder(loaded);
+      topoOrderState.write(order);
+      this.insertTopoOrder = order;
+    }
+    this.schema = c.sideInput(schemaView);
   }
 
   private void writeFailedRecords(Consumer<String> sink) {

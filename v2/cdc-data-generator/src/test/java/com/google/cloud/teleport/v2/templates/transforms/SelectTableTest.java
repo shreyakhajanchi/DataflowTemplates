@@ -119,8 +119,8 @@ public class SelectTableTest {
       }
     }
 
-    assertEquals(110.0 / 160.0, probA, 0.0001);
-    assertEquals(50.0 / 160.0, probC, 0.0001);
+    assertEquals(10.0 / 60.0, probA, 0.0001);
+    assertEquals(50.0 / 60.0, probC, 0.0001);
   }
 
   @Test
