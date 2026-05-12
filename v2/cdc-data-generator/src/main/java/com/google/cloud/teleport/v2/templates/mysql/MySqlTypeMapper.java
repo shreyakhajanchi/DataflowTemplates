@@ -49,8 +49,9 @@ public class MySqlTypeMapper implements TypeMapper {
         return LogicalType.BOOLEAN;
 
       case "TINYINT":
-        // Tip: If type == "TINYINT" AND length == 1, return LogicalType.BOOLEAN.
-        return (size != null && size == 1) ? LogicalType.BOOLEAN : LogicalType.INT64;
+        boolean isBool =
+            (size != null && size == 1) || (typeName != null && typeName.contains("(1)"));
+        return isBool ? LogicalType.BOOLEAN : LogicalType.INT64;
       case "SMALLINT":
       case "MEDIUMINT": // Added
       case "INTEGER":
