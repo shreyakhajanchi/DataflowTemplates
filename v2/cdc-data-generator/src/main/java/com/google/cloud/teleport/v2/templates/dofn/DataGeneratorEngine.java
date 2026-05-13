@@ -50,7 +50,7 @@ public class DataGeneratorEngine {
 
   private final Integer updateInterval;
   private final Integer deleteInterval;
-  private final Faker faker;
+  private final ThreadLocal<Faker> fakerThreadLocal;
 
   private final Counter insertsGenerated =
       Metrics.counter(DataGeneratorEngine.class, "insertsGenerated");
@@ -61,10 +61,10 @@ public class DataGeneratorEngine {
   private final Counter unresolvableFkChildrenDropped =
       Metrics.counter(DataGeneratorEngine.class, "unresolvableFkChildrenDropped");
 
-  public DataGeneratorEngine(Integer updateInterval, Integer deleteInterval, Faker faker) {
+  public DataGeneratorEngine(Integer updateInterval, Integer deleteInterval, Faker initialFaker) {
     this.updateInterval = updateInterval;
     this.deleteInterval = deleteInterval;
-    this.faker = faker;
+    this.fakerThreadLocal = ThreadLocal.withInitial(Faker::new);
   }
 
   /**
@@ -178,7 +178,7 @@ public class DataGeneratorEngine {
     String tableName = table.name();
     tableMapState.put(tableName, table);
 
-    Row fullRow = RowAssembler.completeRow(table, row, faker);
+    Row fullRow = RowAssembler.completeRow(table, row, fakerThreadLocal.get());
     String shardId =
         fullRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)
             ? fullRow.getString(Constants.SHARD_ID_COLUMN_NAME)
@@ -412,7 +412,7 @@ public class DataGeneratorEngine {
       if (columnValues.containsKey(col.name())) {
         val = columnValues.get(col.name());
       } else {
-        val = DataGeneratorUtils.generateValue(col, faker);
+        val = DataGeneratorUtils.generateValue(col, fakerThreadLocal.get());
       }
       schemaBuilder.addField(
           Schema.Field.of(col.name(), DataGeneratorUtils.mapToBeamFieldType(col.logicalType())));
@@ -484,7 +484,9 @@ public class DataGeneratorEngine {
             : "shard0";
 
     if (Constants.MUTATION_UPDATE.equals(event.type)) {
-      Row updateRow = RowAssembler.generateUpdateRow(event.pkValues, table, originalRow, faker);
+      Row updateRow =
+          RowAssembler.generateUpdateRow(
+              event.pkValues, table, originalRow, fakerThreadLocal.get());
       batcher.bufferRow(
           event.tableName, updateRow, Constants.MUTATION_UPDATE, table, shardId, topoOrder);
       updatesGenerated.inc();
@@ -522,7 +524,7 @@ public class DataGeneratorEngine {
     }
     double ratio = (double) childInsertQps / parentInsertQps;
     int count = (int) ratio;
-    if (faker.random().nextDouble() < (ratio - count)) {
+    if (fakerThreadLocal.get().random().nextDouble() < (ratio - count)) {
       count++;
     }
     return count;

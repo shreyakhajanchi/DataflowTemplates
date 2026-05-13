@@ -81,6 +81,8 @@ public class DataGenerator {
                 options.getDeleteQps(),
                 options.getSchemaConfig()));
 
+    int keyParallelism = options.getKeyParallelism() != null ? options.getKeyParallelism() : 500;
+
     // Generate ticks based on schema QPS
     PCollection<DataGeneratorTable> ticks =
         pipeline
@@ -95,7 +97,9 @@ public class DataGenerator {
                     new DoFn<Long, KV<Integer, Long>>() {
                       @ProcessElement
                       public void processElement(ProcessContext c) {
-                        int key = java.util.concurrent.ThreadLocalRandom.current().nextInt(50000);
+                        int key =
+                            java.util.concurrent.ThreadLocalRandom.current()
+                                .nextInt(keyParallelism);
                         c.output(KV.of(key, c.element()));
                       }
                     }))
@@ -112,7 +116,6 @@ public class DataGenerator {
                 maxShards, options.getSinkOptions(), options.getSinkType().name()));
 
     // Reshuffle based on Hash(TableName + PK) to ensure same PK goes to same worker
-    // Key = Hash(TableName + PK) % 5000
     PCollection<KV<Integer, GeneratedRecord>> reshuffledRows =
         pendingRows
             .apply(
@@ -124,19 +127,19 @@ public class DataGenerator {
                         String tableName = c.element().getKey();
                         Row pkValues = c.element().getValue();
                         int hash = (tableName + pkValues.toString()).hashCode();
-                        int shard = Math.abs(hash % 50000);
+                        int shard = Math.abs(hash % keyParallelism);
                         c.output(KV.of(shard, GeneratedRecord.create(tableName, pkValues)));
                       }
                     }))
             .apply("Redistribute", Redistribute.byKey());
 
     Integer updateIntervalMs =
-        (options.getUpdateInterval() != null && options.getUpdateInterval() > 0
+        (options.getUpdateInterval() != null && options.getUpdateInterval() >= 0
                 ? options.getUpdateInterval()
                 : 5)
             * 1000;
     Integer deleteIntervalMs =
-        (options.getDeleteInterval() != null && options.getDeleteInterval() > 0
+        (options.getDeleteInterval() != null && options.getDeleteInterval() >= 0
                 ? options.getDeleteInterval()
                 : 5)
             * 1000;

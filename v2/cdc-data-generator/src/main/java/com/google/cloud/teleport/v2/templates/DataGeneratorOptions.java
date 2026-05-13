@@ -102,6 +102,17 @@ public interface DataGeneratorOptions extends CommonTemplateOptions, GcpOptions,
   void setDeleteQps(Integer value);
 
   @TemplateParameter.Integer(
+      order = 8,
+      optional = true,
+      description = "Key Parallelism",
+      helpText =
+          "The number of distinct state keys to partition the data generator ticks across. Default is 5000.")
+  @Default.Integer(5000)
+  Integer getKeyParallelism();
+
+  void setKeyParallelism(Integer value);
+
+  @TemplateParameter.Integer(
       order = 9,
       optional = true,
       description = "Maximum Shards",

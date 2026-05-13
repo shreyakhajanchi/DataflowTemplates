@@ -61,7 +61,7 @@ public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Ro
   private final String sinkOptionsPath;
   private final String sinkType;
 
-  private transient Faker faker;
+  private transient ThreadLocal<Faker> fakerThreadLocal;
   private transient List<String> logicalShardIds;
 
   /** Per-table PK schema cache. Schemas are static per pipeline run so this is write-once. */
@@ -75,7 +75,7 @@ public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Ro
 
   @Setup
   public void setup() {
-    faker = new Faker();
+    fakerThreadLocal = ThreadLocal.withInitial(Faker::new);
     schemaCache = new HashMap<>();
 
     if (Constants.SINK_TYPE_MYSQL.equalsIgnoreCase(sinkType)
@@ -116,7 +116,7 @@ public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Ro
     Row.Builder rowBuilder = Row.withSchema(schema);
 
     for (DataGeneratorColumn column : pkColumns) {
-      rowBuilder.addValue(DataGeneratorUtils.generateValue(column, faker));
+      rowBuilder.addValue(DataGeneratorUtils.generateValue(column, fakerThreadLocal.get()));
     }
     rowBuilder.addValue(pickShardId());
 
