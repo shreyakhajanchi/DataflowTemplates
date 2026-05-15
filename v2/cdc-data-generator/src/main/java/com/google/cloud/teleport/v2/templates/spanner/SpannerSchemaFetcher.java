@@ -24,6 +24,8 @@ import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorUniqueKey;
+import com.google.cloud.teleport.v2.templates.model.SinkConfig;
+import com.google.cloud.teleport.v2.templates.model.SpannerSinkConfig;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
@@ -32,7 +34,6 @@ import java.util.stream.Collectors;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerAccessor;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
 import org.apache.beam.sdk.options.ValueProvider.StaticValueProvider;
-import org.json.JSONObject;
 
 public class SpannerSchemaFetcher implements SinkSchemaFetcher {
 
@@ -43,11 +44,11 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
   private final SpannerTypeMapper typeMapper = new SpannerTypeMapper();
 
   @Override
-  public void init(String optionsFilePath, String jsonData) {
-    JSONObject json = new JSONObject(jsonData);
-    this.projectId = json.getString("projectId");
-    this.instanceId = json.getString("instanceId");
-    this.databaseId = json.getString("databaseId");
+  public void init(SinkConfig sinkConfig) {
+    SpannerSinkConfig spannerConfig = (SpannerSinkConfig) sinkConfig;
+    this.projectId = spannerConfig.getProjectId();
+    this.instanceId = spannerConfig.getInstanceId();
+    this.databaseId = spannerConfig.getDatabaseId();
   }
 
   @Override

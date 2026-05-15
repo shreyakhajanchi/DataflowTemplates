@@ -19,9 +19,9 @@ import com.google.cloud.teleport.v2.templates.DataGeneratorOptions.SinkType;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.model.GeneratedRecord;
-import com.google.cloud.teleport.v2.templates.mysql.MySqlDataWriter;
+import com.google.cloud.teleport.v2.templates.model.SinkConfig;
 import com.google.cloud.teleport.v2.templates.sink.DataWriter;
-import com.google.cloud.teleport.v2.templates.spanner.SpannerDataWriter;
+import com.google.cloud.teleport.v2.templates.sink.DataWriterFactory;
 import com.google.cloud.teleport.v2.templates.utils.FailureRecord;
 import com.google.cloud.teleport.v2.templates.utils.SchemaUtils;
 import com.google.common.annotations.VisibleForTesting;
@@ -62,7 +62,7 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
   static final int DEFAULT_BATCH_SIZE = 100;
 
   private final SinkType sinkType;
-  private final String sinkOptionsPath;
+  private final SinkConfig sinkConfig;
   private final int batchSize;
   private final Integer jdbcPoolSize;
   private final Integer updateInterval;
@@ -98,14 +98,14 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
 
   public BatchAndWriteFn(
       SinkType sinkType,
-      String sinkOptionsPath,
+      SinkConfig sinkConfig,
       Integer batchSize,
       Integer jdbcPoolSize,
       Integer updateInterval,
       Integer deleteInterval,
       PCollectionView<DataGeneratorSchema> schemaView) {
     this.sinkType = sinkType;
-    this.sinkOptionsPath = sinkOptionsPath;
+    this.sinkConfig = sinkConfig;
     this.batchSize = (batchSize != null && batchSize > 0) ? batchSize : DEFAULT_BATCH_SIZE;
     this.jdbcPoolSize = jdbcPoolSize;
     this.updateInterval = updateInterval;
@@ -118,7 +118,7 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
     this.schema = null;
     this.insertTopoOrder = null;
     if (writer == null) {
-      writer = createWriter(sinkType, sinkOptionsPath);
+      writer = createWriter(sinkType, sinkConfig);
     }
     if (faker == null) {
       faker = new Faker();
@@ -129,15 +129,8 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
   }
 
   @VisibleForTesting
-  protected DataWriter createWriter(SinkType type, String configPath) {
-    switch (type) {
-      case MYSQL:
-        return new MySqlDataWriter(configPath);
-      case SPANNER:
-        return new SpannerDataWriter(configPath);
-      default:
-        throw new IllegalArgumentException("Unsupported sink type: " + type);
-    }
+  protected DataWriter createWriter(SinkType type, SinkConfig config) {
+    return DataWriterFactory.createWriter(type, config);
   }
 
   @StartBundle

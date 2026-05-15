@@ -19,8 +19,10 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 
+import com.google.cloud.spanner.Dialect;
 import com.google.cloud.teleport.v2.spanner.ddl.Ddl;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
+import com.google.cloud.teleport.v2.templates.model.SpannerSinkConfig;
 import com.google.common.collect.ImmutableList;
 import java.io.IOException;
 import org.apache.beam.sdk.io.gcp.spanner.SpannerConfig;
@@ -41,8 +43,8 @@ public class SpannerSchemaFetcherTest {
 
   @Before
   public void setUp() {
-    String json = "{\"projectId\": \"p\", \"instanceId\": \"i\", \"databaseId\": \"d\"}";
-    fetcher.init("dummy.json", json);
+    SpannerSinkConfig config = new SpannerSinkConfig("p", "i", "d", Dialect.GOOGLE_STANDARD_SQL);
+    fetcher.init(config);
   }
 
   @Test

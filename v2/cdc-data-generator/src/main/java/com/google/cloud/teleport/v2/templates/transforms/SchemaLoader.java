@@ -21,16 +21,9 @@ import com.google.cloud.teleport.v2.templates.dofn.ApplyOverridesFn;
 import com.google.cloud.teleport.v2.templates.dofn.BuildSchemaDagFn;
 import com.google.cloud.teleport.v2.templates.dofn.FetchSchemaFn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
+import com.google.cloud.teleport.v2.templates.model.SinkConfig;
 import com.google.cloud.teleport.v2.templates.mysql.MySqlSchemaFetcher;
 import com.google.cloud.teleport.v2.templates.spanner.SpannerSchemaFetcher;
-import com.google.common.io.CharStreams;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.nio.channels.Channels;
-import java.nio.channels.ReadableByteChannel;
-import java.nio.charset.StandardCharsets;
-import org.apache.beam.sdk.io.FileSystems;
 import org.apache.beam.sdk.transforms.Create;
 import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.transforms.ParDo;
@@ -47,7 +40,7 @@ public class SchemaLoader extends PTransform<PBegin, PCollectionView<DataGenerat
 
   private static final Logger LOG = LoggerFactory.getLogger(SchemaLoader.class);
   private final SinkType sinkType;
-  private final String sinkOptionsPath;
+  private final SinkConfig sinkConfig;
   private final Integer insertQps;
   private final Integer updateQps;
   private final Integer deleteQps;
@@ -55,13 +48,13 @@ public class SchemaLoader extends PTransform<PBegin, PCollectionView<DataGenerat
 
   public SchemaLoader(
       SinkType sinkType,
-      String sinkOptionsPath,
+      SinkConfig sinkConfig,
       Integer insertQps,
       Integer updateQps,
       Integer deleteQps,
       String schemaConfigPath) {
     this.sinkType = sinkType;
-    this.sinkOptionsPath = sinkOptionsPath;
+    this.sinkConfig = sinkConfig;
     this.insertQps = insertQps;
     this.updateQps = updateQps;
     this.deleteQps = deleteQps;
@@ -72,7 +65,7 @@ public class SchemaLoader extends PTransform<PBegin, PCollectionView<DataGenerat
   public PCollectionView<DataGeneratorSchema> expand(PBegin input) {
     return input
         .apply("CreateSinkType", Create.of(sinkType))
-        .apply("FetchSchemaFromDb", ParDo.of(new FetchSchemaFn(sinkType, sinkOptionsPath)))
+        .apply("FetchSchemaFromDb", ParDo.of(new FetchSchemaFn(sinkType, sinkConfig)))
         .apply(
             "ApplyOverrides",
             ParDo.of(new ApplyOverridesFn(schemaConfigPath, insertQps, updateQps, deleteQps)))
@@ -94,16 +87,6 @@ public class SchemaLoader extends PTransform<PBegin, PCollectionView<DataGenerat
       return new MySqlSchemaFetcher();
     } else {
       throw new IllegalArgumentException("Unsupported sink type: " + sinkType);
-    }
-  }
-
-  public static String readSinkOptions(String path) throws IOException {
-    try (ReadableByteChannel channel =
-        FileSystems.open(FileSystems.matchNewResource(path, false))) {
-      try (Reader reader =
-          new InputStreamReader(Channels.newInputStream(channel), StandardCharsets.UTF_8)) {
-        return CharStreams.toString(reader);
-      }
     }
   }
 }

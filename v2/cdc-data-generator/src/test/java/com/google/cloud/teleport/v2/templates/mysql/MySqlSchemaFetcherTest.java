@@ -22,14 +22,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.cloud.teleport.v2.spanner.migrations.shard.Shard;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
-import java.io.File;
+import com.google.cloud.teleport.v2.templates.model.MySqlSinkConfig;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collections;
 import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -48,23 +48,27 @@ public class MySqlSchemaFetcherTest {
 
   @Before
   public void setUp() throws IOException {
-    File tmpFile = File.createTempFile("shard", ".json");
-    tmpFile.deleteOnExit();
-    String shardJson =
-        "[{\"logicalShardId\": \"shard1\", \"host\": \"localhost\", \"port\": \"3306\", \"user\": \"root\", \"password\": \"pass\", \"dbName\": \"db\", \"dbNameToLogicalShardIdMap\": {\"db\": \"db1\"}, \"secretManagerUri\": \"\"}]";
-    Files.write(tmpFile.toPath(), shardJson.getBytes(StandardCharsets.UTF_8));
-    fetcher.init(tmpFile.getAbsolutePath(), shardJson);
+    Shard shard = new Shard();
+    shard.setLogicalShardId("shard1");
+    shard.setHost("localhost");
+    shard.setPort("3306");
+    shard.setUser("root");
+    shard.setPassword("pass");
+    shard.setDbName("db");
+    fetcher.init(new MySqlSinkConfig(Collections.singletonList(shard)));
   }
 
   @Test
   @Ignore("Broken due to spanner-common dependency mismatch")
   public void testGetSchemaMySql() throws IOException, SQLException {
-    File tmpFile = File.createTempFile("shard", ".json");
-    tmpFile.deleteOnExit();
-    String shardJson =
-        "[{\"logicalShardId\": \"shard1\", \"host\": \"localhost\", \"port\": \"3306\", \"user\": \"root\", \"password\": \"pass\", \"dbName\": \"db\", \"dbNameToLogicalShardIdMap\": {\"db\": \"db1\"}, \"secretManagerUri\": \"\"}]";
-    Files.write(tmpFile.toPath(), shardJson.getBytes(StandardCharsets.UTF_8));
-    fetcher.init(tmpFile.getAbsolutePath(), shardJson);
+    Shard shard = new Shard();
+    shard.setLogicalShardId("shard1");
+    shard.setHost("localhost");
+    shard.setPort("3306");
+    shard.setUser("root");
+    shard.setPassword("pass");
+    shard.setDbName("db");
+    fetcher.init(new MySqlSinkConfig(Collections.singletonList(shard)));
 
     // Mock connection
     doReturn(connection).when(fetcher).getConnection();
@@ -110,12 +114,14 @@ public class MySqlSchemaFetcherTest {
   @Test
   @Ignore("Broken due to spanner-common dependency mismatch")
   public void testGetSchemaMySqlWithFKAndUK() throws IOException, SQLException {
-    File tmpFile = File.createTempFile("shard", ".json");
-    tmpFile.deleteOnExit();
-    String shardJson =
-        "[{\"logicalShardId\": \"shard1\", \"host\": \"localhost\", \"port\": \"3306\", \"user\": \"root\", \"password\": \"pass\", \"dbName\": \"db\", \"dbNameToLogicalShardIdMap\": {\"db\": \"db1\"}, \"secretManagerUri\": \"\"}]";
-    Files.write(tmpFile.toPath(), shardJson.getBytes(StandardCharsets.UTF_8));
-    fetcher.init(tmpFile.getAbsolutePath(), shardJson);
+    Shard shard = new Shard();
+    shard.setLogicalShardId("shard1");
+    shard.setHost("localhost");
+    shard.setPort("3306");
+    shard.setUser("root");
+    shard.setPassword("pass");
+    shard.setDbName("db");
+    fetcher.init(new MySqlSinkConfig(Collections.singletonList(shard)));
 
     // Mock connection
     doReturn(connection).when(fetcher).getConnection();

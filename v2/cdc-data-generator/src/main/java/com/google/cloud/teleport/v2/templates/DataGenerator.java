@@ -18,16 +18,19 @@ package com.google.cloud.teleport.v2.templates;
 import com.google.cloud.teleport.metadata.Template;
 import com.google.cloud.teleport.metadata.TemplateCategory;
 import com.google.cloud.teleport.v2.common.UncaughtExceptionLogger;
+import com.google.cloud.teleport.v2.templates.dofn.BatchAndWriteFn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.model.GeneratedRecord;
-import com.google.cloud.teleport.v2.templates.transforms.BatchAndWrite;
+import com.google.cloud.teleport.v2.templates.model.SinkConfig;
 import com.google.cloud.teleport.v2.templates.transforms.GeneratePrimaryKey;
 import com.google.cloud.teleport.v2.templates.transforms.GenerateTicks;
 import com.google.cloud.teleport.v2.templates.transforms.SchemaLoader;
 import com.google.cloud.teleport.v2.templates.transforms.SelectTable;
+import com.google.cloud.teleport.v2.templates.utils.SinkConfigParser;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
+import org.apache.beam.sdk.coders.StringUtf8Coder;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.apache.beam.sdk.transforms.ParDo;
@@ -70,12 +73,20 @@ public class DataGenerator {
         .registerCoderForClass(
             Row.class, org.apache.beam.sdk.coders.SerializableCoder.of(Row.class));
 
+    SinkConfig sinkConfig;
+    try {
+      sinkConfig = SinkConfigParser.parse(options.getSinkType(), options.getSinkOptions());
+    } catch (java.io.IOException e) {
+      throw new RuntimeException(
+          "Failed to parse sink configuration from " + options.getSinkOptions(), e);
+    }
+
     PCollectionView<DataGeneratorSchema> schemaView =
         pipeline.apply(
             "LoadSchema",
             new SchemaLoader(
                 options.getSinkType(),
-                options.getSinkOptions(),
+                sinkConfig,
                 options.getInsertQps(),
                 options.getUpdateQps(),
                 options.getDeleteQps(),
@@ -112,8 +123,7 @@ public class DataGenerator {
     PCollection<KV<String, Row>> pendingRows =
         ticks.apply(
             "GeneratePrimaryKey",
-            new GeneratePrimaryKey(
-                maxShards, options.getSinkOptions(), options.getSinkType().name()));
+            new GeneratePrimaryKey(maxShards, sinkConfig, options.getSinkType().name()));
 
     // Reshuffle based on Hash(TableName + PK) to ensure same PK goes to same worker
     PCollection<KV<Integer, GeneratedRecord>> reshuffledRows =
@@ -145,16 +155,20 @@ public class DataGenerator {
             * 1000;
 
     PCollection<String> dlqRecords =
-        reshuffledRows.apply(
-            "BatchAndWrite",
-            new BatchAndWrite(
-                options.getSinkType(),
-                options.getSinkOptions(),
-                options.getBatchSize(),
-                options.getJdbcPoolSize(),
-                updateIntervalMs,
-                deleteIntervalMs,
-                schemaView));
+        reshuffledRows
+            .apply(
+                "BatchAndWrite",
+                ParDo.of(
+                        new BatchAndWriteFn(
+                            options.getSinkType(),
+                            sinkConfig,
+                            options.getBatchSize(),
+                            options.getJdbcPoolSize(),
+                            updateIntervalMs,
+                            deleteIntervalMs,
+                            schemaView))
+                    .withSideInputs(schemaView))
+            .setCoder(StringUtf8Coder.of());
 
     if (options.getDlqDirectory() != null && !options.getDlqDirectory().isEmpty()) {
       dlqRecords.apply(

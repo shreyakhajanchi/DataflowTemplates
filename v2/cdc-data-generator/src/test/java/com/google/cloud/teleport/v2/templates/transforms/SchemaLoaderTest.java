@@ -21,12 +21,16 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import com.google.cloud.spanner.Dialect;
 import com.google.cloud.teleport.v2.templates.DataGeneratorOptions.SinkType;
 import com.google.cloud.teleport.v2.templates.common.SinkSchemaFetcher;
 import com.google.cloud.teleport.v2.templates.dofn.FetchSchemaFn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
+import com.google.cloud.teleport.v2.templates.model.MySqlSinkConfig;
+import com.google.cloud.teleport.v2.templates.model.SpannerSinkConfig;
 import com.google.common.collect.ImmutableMap;
 import java.io.IOException;
+import java.util.Collections;
 import org.apache.beam.sdk.testing.TestPipeline;
 import org.apache.beam.sdk.transforms.DoFn;
 import org.junit.Rule;
@@ -49,24 +53,20 @@ public class SchemaLoaderTest {
         DataGeneratorSchema.builder().tables(ImmutableMap.of()).build();
     when(mockFetcher.getSchema()).thenReturn(schema);
 
+    SpannerSinkConfig config = new SpannerSinkConfig("p", "i", "d", Dialect.GOOGLE_STANDARD_SQL);
     FetchSchemaFn fn =
-        new FetchSchemaFn(SinkType.SPANNER, "options") {
+        new FetchSchemaFn(SinkType.SPANNER, config) {
           @Override
           protected SinkSchemaFetcher createFetcher(SinkType sinkType) {
             assertEquals(SinkType.SPANNER, sinkType);
             return mockFetcher;
-          }
-
-          @Override
-          protected String readSinkOptions(String path) throws IOException {
-            return "{}";
           }
         };
 
     DoFn.OutputReceiver<DataGeneratorSchema> receiver = mock(DoFn.OutputReceiver.class);
     fn.processElement(receiver);
 
-    verify(mockFetcher).init("options", "{}");
+    verify(mockFetcher).init(config);
 
     verify(receiver).output(schema);
   }
@@ -78,56 +78,44 @@ public class SchemaLoaderTest {
         DataGeneratorSchema.builder().tables(ImmutableMap.of()).build();
     when(mockFetcher.getSchema()).thenReturn(schema);
 
+    MySqlSinkConfig config = new MySqlSinkConfig(Collections.emptyList());
     FetchSchemaFn fn =
-        new FetchSchemaFn(SinkType.MYSQL, "options") {
+        new FetchSchemaFn(SinkType.MYSQL, config) {
           @Override
           protected SinkSchemaFetcher createFetcher(SinkType sinkType) {
             assertEquals(SinkType.MYSQL, sinkType);
             return mockFetcher;
-          }
-
-          @Override
-          protected String readSinkOptions(String path) throws IOException {
-            return "{}";
           }
         };
 
     DoFn.OutputReceiver<DataGeneratorSchema> receiver = mock(DoFn.OutputReceiver.class);
     fn.processElement(receiver);
 
-    verify(mockFetcher).init("options", "{}");
+    verify(mockFetcher).init(config);
     verify(receiver).output(schema);
   }
 
   @Test
   public void testFetchSchemaFn_Unsupported() throws IOException {
-    FetchSchemaFn fn = new FetchSchemaFn(null, "options") { // null or dummy enum if possible
-          @Override
-          protected String readSinkOptions(String path) throws IOException {
-            return "{}";
-          }
-        };
+    SpannerSinkConfig config = new SpannerSinkConfig("p", "i", "d", Dialect.GOOGLE_STANDARD_SQL);
+    FetchSchemaFn fn = new FetchSchemaFn(null, config);
 
     DoFn.OutputReceiver<DataGeneratorSchema> receiver = mock(DoFn.OutputReceiver.class);
-
-    // unexpected IO exception for null sink type is not what we want to test, we
-    // want to test createFetcher throwing
-    // But wait, createFetcher is called inside processElement.
-    // We didn't override createFetcher here so it uses the real one which throws
-    // IllegalArgumentException
-    // However, the real one checks for SPANNER and MYSQL. null will throw
-    // "Unsupported sink type: null"
 
     assertThrows(IllegalArgumentException.class, () -> fn.processElement(receiver));
   }
 
   @Test
   public void testFetchSchemaFn_IOException() throws IOException {
+    final SinkSchemaFetcher mockFetcher = mock(SinkSchemaFetcher.class);
+    when(mockFetcher.getSchema()).thenThrow(new IOException("File not found"));
+
+    SpannerSinkConfig config = new SpannerSinkConfig("p", "i", "d", Dialect.GOOGLE_STANDARD_SQL);
     FetchSchemaFn fn =
-        new FetchSchemaFn(SinkType.SPANNER, "options") {
+        new FetchSchemaFn(SinkType.SPANNER, config) {
           @Override
-          protected String readSinkOptions(String path) throws IOException {
-            throw new IOException("File not found");
+          protected SinkSchemaFetcher createFetcher(SinkType sinkType) {
+            return mockFetcher;
           }
         };
 

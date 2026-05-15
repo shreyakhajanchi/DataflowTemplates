@@ -15,10 +15,12 @@
  */
 package com.google.cloud.teleport.v2.templates.spanner;
 
+import com.google.cloud.spanner.Dialect;
 import com.google.cloud.spanner.Mutation;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
+import com.google.cloud.teleport.v2.templates.model.SpannerSinkConfig;
 import com.google.cloud.teleport.v2.templates.spanner.SpannerDataWriter.MutationType;
 import java.util.Arrays;
 import java.util.List;
@@ -34,7 +36,7 @@ public class SpannerDataWriterTest {
   public void testRowToMutation_dateMapping() {
     SpannerDataWriter writer =
         new SpannerDataWriter(
-            "{\"instanceId\":\"inst\",\"databaseId\":\"db\",\"projectId\":\"proj\"}");
+            new SpannerSinkConfig("proj", "inst", "db", Dialect.GOOGLE_STANDARD_SQL));
     DataGeneratorColumn col =
         DataGeneratorColumn.builder()
             .name("date_col")
@@ -67,7 +69,7 @@ public class SpannerDataWriterTest {
   public void testRowToMutation_arrayMapping() {
     SpannerDataWriter writer =
         new SpannerDataWriter(
-            "{\"instanceId\":\"inst\",\"databaseId\":\"db\",\"projectId\":\"proj\"}");
+            new SpannerSinkConfig("proj", "inst", "db", Dialect.GOOGLE_STANDARD_SQL));
     DataGeneratorColumn col =
         DataGeneratorColumn.builder()
             .name("array_col")
@@ -101,7 +103,7 @@ public class SpannerDataWriterTest {
   public void testRowToInsertMutation() {
     SpannerDataWriter writer =
         new SpannerDataWriter(
-            "{\"instanceId\":\"inst\",\"databaseId\":\"db\",\"projectId\":\"proj\"}");
+            new SpannerSinkConfig("proj", "inst", "db", Dialect.GOOGLE_STANDARD_SQL));
     DataGeneratorColumn col =
         DataGeneratorColumn.builder()
             .name("id")
@@ -133,7 +135,7 @@ public class SpannerDataWriterTest {
   public void testRowToUpdateMutation() {
     SpannerDataWriter writer =
         new SpannerDataWriter(
-            "{\"instanceId\":\"inst\",\"databaseId\":\"db\",\"projectId\":\"proj\"}");
+            new SpannerSinkConfig("proj", "inst", "db", Dialect.GOOGLE_STANDARD_SQL));
     DataGeneratorColumn col =
         DataGeneratorColumn.builder()
             .name("id")
@@ -165,7 +167,7 @@ public class SpannerDataWriterTest {
   public void testRowToDeleteMutation() {
     SpannerDataWriter writer =
         new SpannerDataWriter(
-            "{\"instanceId\":\"inst\",\"databaseId\":\"db\",\"projectId\":\"proj\"}");
+            new SpannerSinkConfig("proj", "inst", "db", Dialect.GOOGLE_STANDARD_SQL));
     DataGeneratorColumn col =
         DataGeneratorColumn.builder()
             .name("id")
@@ -197,7 +199,7 @@ public class SpannerDataWriterTest {
   public void testRowToDeleteMutation_missingPk() {
     SpannerDataWriter writer =
         new SpannerDataWriter(
-            "{\"instanceId\":\"inst\",\"databaseId\":\"db\",\"projectId\":\"proj\"}");
+            new SpannerSinkConfig("proj", "inst", "db", Dialect.GOOGLE_STANDARD_SQL));
     DataGeneratorColumn col =
         DataGeneratorColumn.builder()
             .name("id")

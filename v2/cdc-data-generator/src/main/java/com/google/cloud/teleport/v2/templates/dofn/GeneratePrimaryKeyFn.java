@@ -16,10 +16,10 @@
 package com.google.cloud.teleport.v2.templates.dofn;
 
 import com.google.cloud.teleport.v2.spanner.migrations.shard.Shard;
-import com.google.cloud.teleport.v2.spanner.migrations.utils.SecretManagerAccessorImpl;
-import com.google.cloud.teleport.v2.spanner.migrations.utils.ShardFileReader;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
+import com.google.cloud.teleport.v2.templates.model.MySqlSinkConfig;
+import com.google.cloud.teleport.v2.templates.model.SinkConfig;
 import com.google.cloud.teleport.v2.templates.utils.Constants;
 import com.google.cloud.teleport.v2.templates.utils.DataGeneratorUtils;
 import com.google.common.annotations.VisibleForTesting;
@@ -58,7 +58,7 @@ public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Ro
   private static final Logger LOG = LoggerFactory.getLogger(GeneratePrimaryKeyFn.class);
 
   private final int maxShards;
-  private final String sinkOptionsPath;
+  private final SinkConfig sinkConfig;
   private final String sinkType;
 
   private transient ThreadLocal<Faker> fakerThreadLocal;
@@ -67,9 +67,9 @@ public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Ro
   /** Per-table PK schema cache. Schemas are static per pipeline run so this is write-once. */
   private transient Map<String, Schema> schemaCache;
 
-  public GeneratePrimaryKeyFn(int maxShards, String sinkOptionsPath, String sinkType) {
+  public GeneratePrimaryKeyFn(int maxShards, SinkConfig sinkConfig, String sinkType) {
     this.maxShards = maxShards;
-    this.sinkOptionsPath = sinkOptionsPath;
+    this.sinkConfig = sinkConfig;
     this.sinkType = sinkType;
   }
 
@@ -78,18 +78,13 @@ public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Ro
     fakerThreadLocal = ThreadLocal.withInitial(Faker::new);
     schemaCache = new HashMap<>();
 
-    if (Constants.SINK_TYPE_MYSQL.equalsIgnoreCase(sinkType)
-        && sinkOptionsPath != null
-        && !sinkOptionsPath.isEmpty()) {
-      try {
-        ShardFileReader shardFileReader = new ShardFileReader(new SecretManagerAccessorImpl());
-        List<Shard> shards = shardFileReader.getOrderedShardDetails(sinkOptionsPath);
+    if (sinkConfig instanceof MySqlSinkConfig) {
+      MySqlSinkConfig mySqlSinkConfig = (MySqlSinkConfig) sinkConfig;
+      if (mySqlSinkConfig.getShards() != null) {
         this.logicalShardIds =
-            shards == null || shards.isEmpty()
-                ? null
-                : shards.stream().map(Shard::getLogicalShardId).collect(Collectors.toList());
-      } catch (Exception e) {
-        throw new RuntimeException("Failed to read shards from " + sinkOptionsPath, e);
+            mySqlSinkConfig.getShards().stream()
+                .map(Shard::getLogicalShardId)
+                .collect(Collectors.toList());
       }
     }
   }
@@ -100,11 +95,6 @@ public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Ro
     List<DataGeneratorColumn> pkColumns = primaryKeyColumns(table);
 
     if (pkColumns.isEmpty()) {
-      // A table without a PK cannot have a unique row key synthesised for it. This is
-      // a
-      // schema-definition problem, so log + skip rather than emit an empty Row (which
-      // would
-      // corrupt downstream joins on the PK).
       LOG.warn(
           "Table {} has no primary-key columns, or its PK list references unknown columns — "
               + "skipping PK generation.",

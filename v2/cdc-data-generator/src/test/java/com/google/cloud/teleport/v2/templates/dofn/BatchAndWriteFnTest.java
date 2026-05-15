@@ -17,6 +17,7 @@ package com.google.cloud.teleport.v2.templates.dofn;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.cloud.spanner.Dialect;
 import com.google.cloud.teleport.v2.templates.DataGeneratorOptions.SinkType;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorForeignKey;
@@ -24,6 +25,8 @@ import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.model.GeneratedRecord;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
+import com.google.cloud.teleport.v2.templates.model.SinkConfig;
+import com.google.cloud.teleport.v2.templates.model.SpannerSinkConfig;
 import com.google.cloud.teleport.v2.templates.sink.DataWriter;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
@@ -68,14 +71,17 @@ public class BatchAndWriteFnTest implements Serializable {
 
   @Test
   public void constructor_nullBatchSize_fallsBackToDefault() {
-    BatchAndWriteFn fn = new BatchAndWriteFn(SinkType.SPANNER, "{}", null, null, null, null, null);
+    SpannerSinkConfig config = new SpannerSinkConfig("p", "i", "d", Dialect.GOOGLE_STANDARD_SQL);
+    BatchAndWriteFn fn =
+        new BatchAndWriteFn(SinkType.SPANNER, config, null, null, null, null, null);
     assertThat(BatchAndWriteFn.DEFAULT_BATCH_SIZE).isGreaterThan(0);
     assertThat(fn).isNotNull();
   }
 
   @Test
   public void constructor_nonPositiveBatchSize_fallsBackToDefault() {
-    BatchAndWriteFn fn = new BatchAndWriteFn(SinkType.SPANNER, "{}", 0, null, null, null, null);
+    SpannerSinkConfig config = new SpannerSinkConfig("p", "i", "d", Dialect.GOOGLE_STANDARD_SQL);
+    BatchAndWriteFn fn = new BatchAndWriteFn(SinkType.SPANNER, config, 0, null, null, null, null);
     assertThat(fn).isNotNull();
   }
 
@@ -100,11 +106,13 @@ public class BatchAndWriteFnTest implements Serializable {
     Schema rowSchema = Schema.builder().addInt64Field("id").build();
     Row row = Row.withSchema(rowSchema).addValue(1L).build();
 
+    SpannerSinkConfig config = new SpannerSinkConfig("p", "i", "d", Dialect.GOOGLE_STANDARD_SQL);
+
     pipeline
         .apply("Input", Create.of(KV.of(0, GeneratedRecord.create("Users", row))))
         .apply(
             "BatchAndWrite",
-            ParDo.of(new RecordingBatchAndWriteFn(SinkType.SPANNER, "{}", 1, schemaView))
+            ParDo.of(new RecordingBatchAndWriteFn(SinkType.SPANNER, config, 1, schemaView))
                 .withSideInputs(schemaView));
 
     pipeline.run().waitUntilFinish();
@@ -126,11 +134,13 @@ public class BatchAndWriteFnTest implements Serializable {
     Schema rowSchema = Schema.builder().addInt64Field("id").build();
     Row row = Row.withSchema(rowSchema).addValue(1L).build();
 
+    SpannerSinkConfig config = new SpannerSinkConfig("p", "i", "d", Dialect.GOOGLE_STANDARD_SQL);
+
     pipeline
         .apply("Input", Create.of(KV.of(0, GeneratedRecord.create("MissingTable", row))))
         .apply(
             "BatchAndWrite",
-            ParDo.of(new RecordingBatchAndWriteFn(SinkType.SPANNER, "{}", 1, schemaView))
+            ParDo.of(new RecordingBatchAndWriteFn(SinkType.SPANNER, config, 1, schemaView))
                 .withSideInputs(schemaView));
 
     pipeline.run().waitUntilFinish();
@@ -195,11 +205,13 @@ public class BatchAndWriteFnTest implements Serializable {
     Schema rowSchema = Schema.builder().addInt64Field("id").addStringField("name").build();
     Row userRow = Row.withSchema(rowSchema).addValues(1L, "Alice").build();
 
+    SpannerSinkConfig config = new SpannerSinkConfig("p", "i", "d", Dialect.GOOGLE_STANDARD_SQL);
+
     pipeline
         .apply("Input", Create.of(KV.of(0, GeneratedRecord.create("Users", userRow))))
         .apply(
             "BatchAndWrite",
-            ParDo.of(new RecordingBatchAndWriteFn(SinkType.SPANNER, "{}", 1, schemaView))
+            ParDo.of(new RecordingBatchAndWriteFn(SinkType.SPANNER, config, 1, schemaView))
                 .withSideInputs(schemaView));
 
     pipeline.run().waitUntilFinish();
@@ -227,12 +239,14 @@ public class BatchAndWriteFnTest implements Serializable {
     Schema rowSchema = Schema.builder().addInt64Field("id").build();
     Row row = Row.withSchema(rowSchema).addValue(1L).build();
 
+    SpannerSinkConfig config = new SpannerSinkConfig("p", "i", "d", Dialect.GOOGLE_STANDARD_SQL);
+
     PCollection<String> dlq =
         pipeline
             .apply("Input", Create.of(KV.of(0, GeneratedRecord.create("Users", row))))
             .apply(
                 "BatchAndWrite",
-                ParDo.of(new FailingBatchAndWriteFn(SinkType.SPANNER, "{}", 1, schemaView))
+                ParDo.of(new FailingBatchAndWriteFn(SinkType.SPANNER, config, 1, schemaView))
                     .withSideInputs(schemaView));
 
     PAssert.thatSingleton(dlq.apply("Count", Count.globally())).isEqualTo(1L);
@@ -303,11 +317,13 @@ public class BatchAndWriteFnTest implements Serializable {
     Schema rowSchema = Schema.builder().addInt64Field("id").addStringField("name").build();
     Row parentRow = Row.withSchema(rowSchema).addValues(1L, "Alice").build();
 
+    SpannerSinkConfig config = new SpannerSinkConfig("p", "i", "d", Dialect.GOOGLE_STANDARD_SQL);
+
     pipeline
         .apply("Input", Create.of(KV.of(0, GeneratedRecord.create("Parent", parentRow))))
         .apply(
             "BatchAndWrite",
-            ParDo.of(new RecordingBatchAndWriteFn(SinkType.SPANNER, "{}", 1, schemaView))
+            ParDo.of(new RecordingBatchAndWriteFn(SinkType.SPANNER, config, 1, schemaView))
                 .withSideInputs(schemaView));
 
     pipeline.run().waitUntilFinish();
@@ -472,14 +488,14 @@ public class BatchAndWriteFnTest implements Serializable {
   static class RecordingBatchAndWriteFn extends BatchAndWriteFn {
     RecordingBatchAndWriteFn(
         SinkType sinkType,
-        String sinkOptionsPath,
+        SinkConfig sinkConfig,
         Integer batchSize,
         PCollectionView<DataGeneratorSchema> schemaView) {
-      super(sinkType, sinkOptionsPath, batchSize, null, null, null, schemaView);
+      super(sinkType, sinkConfig, batchSize, null, null, null, schemaView);
     }
 
     @Override
-    protected DataWriter createWriter(SinkType type, String configPath) {
+    protected DataWriter createWriter(SinkType type, SinkConfig config) {
       return new RecordingDataWriter();
     }
   }
@@ -488,14 +504,14 @@ public class BatchAndWriteFnTest implements Serializable {
   static class FailingBatchAndWriteFn extends BatchAndWriteFn {
     FailingBatchAndWriteFn(
         SinkType sinkType,
-        String sinkOptionsPath,
+        SinkConfig sinkConfig,
         Integer batchSize,
         PCollectionView<DataGeneratorSchema> schemaView) {
-      super(sinkType, sinkOptionsPath, batchSize, null, null, null, schemaView);
+      super(sinkType, sinkConfig, batchSize, null, null, null, schemaView);
     }
 
     @Override
-    protected DataWriter createWriter(SinkType type, String configPath) {
+    protected DataWriter createWriter(SinkType type, SinkConfig config) {
       return new FailingDataWriter();
     }
   }

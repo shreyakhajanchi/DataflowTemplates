@@ -18,6 +18,7 @@ package com.google.cloud.teleport.v2.templates.dofn;
 import com.google.cloud.teleport.v2.templates.DataGeneratorOptions.SinkType;
 import com.google.cloud.teleport.v2.templates.common.SinkSchemaFetcher;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorSchema;
+import com.google.cloud.teleport.v2.templates.model.SinkConfig;
 import com.google.cloud.teleport.v2.templates.transforms.SchemaLoader;
 import java.io.IOException;
 import org.apache.beam.sdk.transforms.DoFn;
@@ -29,20 +30,18 @@ public class FetchSchemaFn extends DoFn<SinkType, DataGeneratorSchema> {
   private static final Logger LOG = LoggerFactory.getLogger(FetchSchemaFn.class);
 
   private final SinkType sinkType;
-  private final String sinkOptionsPath;
+  private final SinkConfig sinkConfig;
 
-  public FetchSchemaFn(SinkType sinkType, String sinkOptionsPath) {
+  public FetchSchemaFn(SinkType sinkType, SinkConfig sinkConfig) {
     this.sinkType = sinkType;
-    this.sinkOptionsPath = sinkOptionsPath;
+    this.sinkConfig = sinkConfig;
   }
 
   @ProcessElement
   public void processElement(OutputReceiver<DataGeneratorSchema> receiver) {
     try {
-      String sinkOptionsJson = readSinkOptions(sinkOptionsPath);
       SinkSchemaFetcher fetcher = createFetcher(sinkType);
-
-      fetcher.init(sinkOptionsPath, sinkOptionsJson);
+      fetcher.init(sinkConfig);
       DataGeneratorSchema schema = fetcher.getSchema();
       LOG.info("Fetched Schema from DB: {}", schema);
 
@@ -54,9 +53,5 @@ public class FetchSchemaFn extends DoFn<SinkType, DataGeneratorSchema> {
 
   protected SinkSchemaFetcher createFetcher(SinkType sinkType) {
     return SchemaLoader.createFetcher(sinkType);
-  }
-
-  protected String readSinkOptions(String path) throws IOException {
-    return SchemaLoader.readSinkOptions(path);
   }
 }

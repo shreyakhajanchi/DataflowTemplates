@@ -37,6 +37,7 @@ import com.google.cloud.teleport.v2.spanner.migrations.utils.ShardFileReader;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorColumn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.model.LogicalType;
+import com.google.cloud.teleport.v2.templates.model.MySqlSinkConfig;
 import com.google.cloud.teleport.v2.templates.utils.Constants;
 import com.google.common.collect.ImmutableList;
 import java.math.BigDecimal;
@@ -96,7 +97,8 @@ public class MySqlDataWriterTest {
   }
 
   private MySqlDataWriter writer() {
-    return new MySqlDataWriter(CONFIG_PATH, mockShardFileReader, mockConnectionHelper);
+    return new MySqlDataWriter(
+        new MySqlSinkConfig(ImmutableList.of(shardA(), shardB())), mockConnectionHelper);
   }
 
   private DataGeneratorTable simpleTable() {
@@ -495,21 +497,20 @@ public class MySqlDataWriterTest {
 
   @Test
   public void testLoadShards_missingPathThrows() {
-    MySqlDataWriter w = new MySqlDataWriter(null, mockShardFileReader, mockConnectionHelper);
+    MySqlDataWriter w = new MySqlDataWriter(null, mockConnectionHelper);
     assertThrows(
-        IllegalArgumentException.class,
-        () -> w.ensureInitialized(Constants.DEFAULT_JDBC_POOL_SIZE));
+        RuntimeException.class, () -> w.ensureInitialized(Constants.DEFAULT_JDBC_POOL_SIZE));
 
-    MySqlDataWriter w2 = new MySqlDataWriter("", mockShardFileReader, mockConnectionHelper);
+    MySqlDataWriter w2 =
+        new MySqlDataWriter(new MySqlSinkConfig(Collections.emptyList()), mockConnectionHelper);
     assertThrows(
-        IllegalArgumentException.class,
-        () -> w2.ensureInitialized(Constants.DEFAULT_JDBC_POOL_SIZE));
+        RuntimeException.class, () -> w2.ensureInitialized(Constants.DEFAULT_JDBC_POOL_SIZE));
   }
 
   @Test
   public void testLoadShards_emptyShardFileThrows() {
-    when(mockShardFileReader.getOrderedShardDetails(anyString())).thenReturn(ImmutableList.of());
-    MySqlDataWriter w = writer();
+    MySqlDataWriter w =
+        new MySqlDataWriter(new MySqlSinkConfig(Collections.emptyList()), mockConnectionHelper);
     assertThrows(
         RuntimeException.class, () -> w.ensureInitialized(Constants.DEFAULT_JDBC_POOL_SIZE));
   }
@@ -534,7 +535,7 @@ public class MySqlDataWriterTest {
   @Test
   public void testConstructor_defaultsToJdbcConnectionHelper() {
     // Basic sanity: public constructor should not blow up even if the file doesn't exist yet.
-    MySqlDataWriter w = new MySqlDataWriter("not-used.json");
+    MySqlDataWriter w = new MySqlDataWriter(new MySqlSinkConfig(ImmutableList.of(shardA())));
     // Close is a no-op by contract; calling it should not throw.
     w.close();
   }
