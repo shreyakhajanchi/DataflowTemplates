@@ -16,12 +16,14 @@
 package com.google.cloud.teleport.v2.templates.model;
 
 import com.google.auto.value.AutoValue;
-import java.io.Serializable;
 import javax.annotation.Nullable;
+import org.apache.beam.sdk.schemas.AutoValueSchema;
+import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 
 /** Represents a column in the data generator schema. */
 @AutoValue
-public abstract class DataGeneratorColumn implements Serializable {
+@DefaultSchema(AutoValueSchema.class)
+public abstract class DataGeneratorColumn {
 
   /** The name of the column. */
   public abstract String name();

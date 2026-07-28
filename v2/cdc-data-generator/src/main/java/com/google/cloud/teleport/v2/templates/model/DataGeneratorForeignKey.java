@@ -17,11 +17,13 @@ package com.google.cloud.teleport.v2.templates.model;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
-import java.io.Serializable;
+import org.apache.beam.sdk.schemas.AutoValueSchema;
+import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 
 /** Represents a foreign key in the data generator schema. */
 @AutoValue
-public abstract class DataGeneratorForeignKey implements Serializable {
+@DefaultSchema(AutoValueSchema.class)
+public abstract class DataGeneratorForeignKey {
 
   /** The name of the foreign key constraint. */
   public abstract String name();

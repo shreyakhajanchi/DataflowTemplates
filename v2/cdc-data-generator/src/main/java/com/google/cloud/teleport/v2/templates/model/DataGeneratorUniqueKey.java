@@ -17,11 +17,13 @@ package com.google.cloud.teleport.v2.templates.model;
 
 import com.google.auto.value.AutoValue;
 import com.google.common.collect.ImmutableList;
-import java.io.Serializable;
+import org.apache.beam.sdk.schemas.AutoValueSchema;
+import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 
 /** Represents a unique key/index in the data generator schema. */
 @AutoValue
-public abstract class DataGeneratorUniqueKey implements Serializable {
+@DefaultSchema(AutoValueSchema.class)
+public abstract class DataGeneratorUniqueKey {
 
   /** The name of the unique key/index. */
   public abstract String name();
