@@ -16,12 +16,14 @@
 package com.google.cloud.teleport.v2.templates.model;
 
 import com.google.auto.value.AutoValue;
-import java.io.Serializable;
+import com.google.cloud.teleport.v2.templates.utils.GeneratedRecordCoder;
+import org.apache.beam.sdk.coders.DefaultCoder;
 import org.apache.beam.sdk.values.Row;
 
 /** Type-safe container wrapping table names and primary key values. */
 @AutoValue
-public abstract class GeneratedRecord implements Serializable {
+@DefaultCoder(GeneratedRecordCoder.class)
+public abstract class GeneratedRecord {
   public abstract String tableName();
 
   public abstract Row primaryKeyValues();

@@ -18,8 +18,8 @@ package com.google.cloud.teleport.v2.templates.transforms;
 import com.google.cloud.teleport.v2.templates.dofn.GeneratePrimaryKeyFn;
 import com.google.cloud.teleport.v2.templates.model.DataGeneratorTable;
 import com.google.cloud.teleport.v2.templates.model.SinkConfig;
+import com.google.cloud.teleport.v2.templates.utils.DynamicRowCoder;
 import org.apache.beam.sdk.coders.KvCoder;
-import org.apache.beam.sdk.coders.SerializableCoder;
 import org.apache.beam.sdk.coders.StringUtf8Coder;
 import org.apache.beam.sdk.transforms.PTransform;
 import org.apache.beam.sdk.transforms.ParDo;
@@ -37,7 +37,7 @@ import org.apache.beam.sdk.values.Row;
  *   <li>Keep the {@code transforms/} package free of DoFn implementation details (mirrors the
  *       {@code SelectTable} / {@code SelectTableFn} split elsewhere in this module).
  *   <li>Pin the output coder. Row has no default coder so the output {@code PCollection} needs an
- *       explicit {@link KvCoder} that uses {@link SerializableCoder} for the Row half.
+ *       explicit {@link KvCoder} that uses {@link DynamicRowCoder} for the Row half.
  * </ul>
  */
 public class GeneratePrimaryKey
@@ -64,6 +64,6 @@ public class GeneratePrimaryKey
             "GeneratePrimaryKeyFn",
             ParDo.of(
                 new GeneratePrimaryKeyFn(sinkConfig, sinkType, customJarPath, customClassName)))
-        .setCoder(KvCoder.of(StringUtf8Coder.of(), SerializableCoder.of(Row.class)));
+        .setCoder(KvCoder.of(StringUtf8Coder.of(), DynamicRowCoder.of()));
   }
 }
