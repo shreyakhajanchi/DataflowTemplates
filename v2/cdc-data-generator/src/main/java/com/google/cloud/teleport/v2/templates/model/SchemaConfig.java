@@ -15,7 +15,6 @@
  */
 package com.google.cloud.teleport.v2.templates.model;
 
-import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
 import javax.annotation.Nullable;
@@ -24,7 +23,7 @@ import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 
 /** Configuration class for schema overrides, used for deserializing HOCON/JSON config files. */
 @DefaultSchema(JavaFieldSchema.class)
-public class SchemaConfig implements Serializable {
+public class SchemaConfig {
 
   @Nullable private Map<String, TableConfig> tables;
 
@@ -43,7 +42,7 @@ public class SchemaConfig implements Serializable {
   }
 
   @DefaultSchema(JavaFieldSchema.class)
-  public static class TableConfig implements Serializable {
+  public static class TableConfig {
     @Nullable private Integer insertQps;
     @Nullable private Integer updateQps;
     @Nullable private Integer deleteQps;
@@ -92,7 +91,7 @@ public class SchemaConfig implements Serializable {
   }
 
   @DefaultSchema(JavaFieldSchema.class)
-  public static class ColumnConfig implements Serializable {
+  public static class ColumnConfig {
     @Nullable private Object fakerExpression;
     @Nullable private Boolean skip;
 
@@ -114,7 +113,7 @@ public class SchemaConfig implements Serializable {
   }
 
   @DefaultSchema(JavaFieldSchema.class)
-  public static class ForeignKeyConfig implements Serializable {
+  public static class ForeignKeyConfig {
     @Nullable private String name;
     @Nullable private String referencedTable;
     @Nullable private List<String> keyColumns;
