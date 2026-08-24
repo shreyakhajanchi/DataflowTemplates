@@ -86,11 +86,11 @@ public class SpannerSchemaFetcherTest {
     when(mockDdlFetcher.fetch(any(SpannerConfig.class))).thenReturn(mockDdl);
 
     DataGeneratorSchema schema = fetcher.getSchema();
-    assertThat(schema.tables()).hasSize(1);
-    assertThat(schema.tables()).containsKey("TableA");
-    DataGeneratorTable actualTable = schema.tables().get("TableA");
+    assertThat(schema.getTables()).hasSize(1);
+    assertThat(schema.getTables()).containsKey("TableA");
+    DataGeneratorTable actualTable = schema.getTables().get("TableA");
 
-    assertThat(actualTable.isRoot()).isTrue();
+    assertThat(actualTable.getRoot()).isTrue();
   }
 
   @Test
@@ -138,16 +138,16 @@ public class SpannerSchemaFetcherTest {
     when(mockDdlFetcher.fetch(any(SpannerConfig.class))).thenReturn(mockDdl);
 
     DataGeneratorSchema schema = fetcher.getSchema();
-    assertThat(schema.tables()).hasSize(1);
-    DataGeneratorTable actualTable = schema.tables().get("TableB");
-    assertThat(actualTable.name()).isEqualTo("TableB");
-    assertThat(actualTable.columns()).hasSize(1);
-    assertThat(actualTable.primaryKeys()).containsExactly("Col1");
-    assertThat(actualTable.foreignKeys()).hasSize(1);
-    assertThat(actualTable.uniqueKeys()).hasSize(1);
-    assertThat(actualTable.uniqueKeys().get(0).name()).isEqualTo("idx_b_col2");
-    assertThat(actualTable.interleavedInTable()).isEqualTo("TableA");
-    assertThat(actualTable.isRoot()).isFalse();
+    assertThat(schema.getTables()).hasSize(1);
+    DataGeneratorTable actualTable = schema.getTables().get("TableB");
+    assertThat(actualTable.getName()).isEqualTo("TableB");
+    assertThat(actualTable.getColumns()).hasSize(1);
+    assertThat(actualTable.getPrimaryKeys()).containsExactly("Col1");
+    assertThat(actualTable.getForeignKeys()).hasSize(1);
+    assertThat(actualTable.getUniqueKeys()).hasSize(1);
+    assertThat(actualTable.getUniqueKeys().get(0).getName()).isEqualTo("idx_b_col2");
+    assertThat(actualTable.getInterleavedInTable()).isEqualTo("TableA");
+    assertThat(actualTable.getRoot()).isFalse();
   }
 
   @Test

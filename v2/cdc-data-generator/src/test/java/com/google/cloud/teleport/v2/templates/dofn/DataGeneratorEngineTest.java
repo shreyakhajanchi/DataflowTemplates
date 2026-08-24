@@ -73,8 +73,8 @@ public class DataGeneratorEngineTest {
                     DataGeneratorColumn.builder()
                         .name("deptCode")
                         .logicalType(LogicalType.STRING)
-                        .isNullable(false)
-                        .isGenerated(false)
+                        .setNullable(false)
+                        .setGenerated(false)
                         .build()))
             .primaryKeys(ImmutableList.of("deptCode"))
             .foreignKeys(ImmutableList.of())
@@ -82,7 +82,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(true)
+            .setRoot(true)
             .childTables(ImmutableList.of("Child"))
             .build();
 
@@ -94,8 +94,8 @@ public class DataGeneratorEngineTest {
                     DataGeneratorColumn.builder()
                         .name("DeptCode")
                         .logicalType(LogicalType.STRING)
-                        .isNullable(false)
-                        .isGenerated(false)
+                        .setNullable(false)
+                        .setGenerated(false)
                         .build()))
             .primaryKeys(ImmutableList.of())
             .foreignKeys(
@@ -110,7 +110,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(false)
+            .setRoot(false)
             .build();
 
     DataGeneratorSchema schema =
@@ -184,9 +184,9 @@ public class DataGeneratorEngineTest {
         DataGeneratorColumn.builder()
             .name("id")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isPrimaryKey(true)
-            .isGenerated(false)
+            .setNullable(false)
+            .setPrimaryKey(true)
+            .setGenerated(false)
             .build();
 
     DataGeneratorTable parentTable =
@@ -199,7 +199,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(20)
             .deleteQps(20)
-            .isRoot(true)
+            .setRoot(true)
             .childTables(ImmutableList.of("Child"))
             .build();
 
@@ -214,7 +214,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(20)
             .deleteQps(20)
-            .isRoot(false)
+            .setRoot(false)
             .build();
 
     DataGeneratorSchema schema =
@@ -323,15 +323,15 @@ public class DataGeneratorEngineTest {
         DataGeneratorColumn.builder()
             .name("parentId1")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
     DataGeneratorColumn parentCol2 =
         DataGeneratorColumn.builder()
             .name("parentId2")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
 
     DataGeneratorTable parentTable =
@@ -344,7 +344,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(true)
+            .setRoot(true)
             .childTables(ImmutableList.of("Child"))
             .build();
 
@@ -352,15 +352,15 @@ public class DataGeneratorEngineTest {
         DataGeneratorColumn.builder()
             .name("childFkId1")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
     DataGeneratorColumn childCol2 =
         DataGeneratorColumn.builder()
             .name("childFkId2")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
 
     DataGeneratorTable childTable =
@@ -380,7 +380,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(false)
+            .setRoot(false)
             .build();
 
     DataGeneratorSchema schema =
@@ -456,9 +456,9 @@ public class DataGeneratorEngineTest {
         DataGeneratorColumn.builder()
             .name("id")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isPrimaryKey(true)
-            .isGenerated(false)
+            .setNullable(false)
+            .setPrimaryKey(true)
+            .setGenerated(false)
             .build();
 
     DataGeneratorTable parentTable =
@@ -471,7 +471,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(true)
+            .setRoot(true)
             .childTables(ImmutableList.of("Child"))
             .build();
 
@@ -509,7 +509,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(false)
+            .setRoot(false)
             .build();
 
     DataGeneratorSchema schemaA =
@@ -560,7 +560,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(false)
+            .setRoot(false)
             .build();
 
     DataGeneratorSchema schemaB =
@@ -646,9 +646,9 @@ public class DataGeneratorEngineTest {
         DataGeneratorColumn.builder()
             .name("id")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
-            .isPrimaryKey(true)
+            .setNullable(false)
+            .setGenerated(false)
+            .setPrimaryKey(true)
             .build();
 
     DataGeneratorTable parentTable =
@@ -661,7 +661,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(true)
+            .setRoot(true)
             .childTables(ImmutableList.of())
             .build();
 
@@ -745,9 +745,9 @@ public class DataGeneratorEngineTest {
         DataGeneratorColumn.builder()
             .name("id")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
-            .isPrimaryKey(true)
+            .setNullable(false)
+            .setGenerated(false)
+            .setPrimaryKey(true)
             .build();
 
     DataGeneratorTable parentTable =
@@ -760,7 +760,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(true)
+            .setRoot(true)
             .childTables(ImmutableList.of("Child"))
             .build();
 
@@ -775,7 +775,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(false)
+            .setRoot(false)
             .build();
 
     DataGeneratorSchema schema =
@@ -880,9 +880,9 @@ public class DataGeneratorEngineTest {
         DataGeneratorColumn.builder()
             .name("id")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
-            .isPrimaryKey(true)
+            .setNullable(false)
+            .setGenerated(false)
+            .setPrimaryKey(true)
             .build();
 
     DataGeneratorTable parentTable =
@@ -895,7 +895,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(true)
+            .setRoot(true)
             .childTables(ImmutableList.of("Child"))
             .build();
 
@@ -910,7 +910,7 @@ public class DataGeneratorEngineTest {
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(false)
+            .setRoot(false)
             .build();
 
     DataGeneratorSchema schema =

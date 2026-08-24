@@ -31,6 +31,7 @@ import com.google.cloud.teleport.v2.templates.transforms.GeneratePrimaryKey;
 import com.google.cloud.teleport.v2.templates.transforms.GenerateTicks;
 import com.google.cloud.teleport.v2.templates.transforms.SchemaLoader;
 import com.google.cloud.teleport.v2.templates.transforms.SelectTable;
+import com.google.cloud.teleport.v2.templates.utils.GeneratedRecordCoder;
 import com.google.cloud.teleport.v2.transforms.DLQWriteTransform.WriteDLQ;
 import com.google.common.io.CharStreams;
 import com.jasonclawson.jackson.dataformat.hocon.HoconFactory;
@@ -43,7 +44,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.Objects;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.PipelineResult;
+import org.apache.beam.sdk.coders.KvCoder;
 import org.apache.beam.sdk.coders.StringUtf8Coder;
+import org.apache.beam.sdk.coders.VarIntCoder;
 import org.apache.beam.sdk.io.FileSystems;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
 import org.apache.beam.sdk.transforms.DoFn;
@@ -166,6 +169,7 @@ public class CdcDataGenerator {
                         c.output(KV.of(shard, GeneratedRecord.create(tableName, pkValues)));
                       }
                     }))
+            .setCoder(KvCoder.of(VarIntCoder.of(), GeneratedRecordCoder.of()))
             .apply("Redistribute", Redistribute.byKey());
 
     Integer updateIntervalMs =

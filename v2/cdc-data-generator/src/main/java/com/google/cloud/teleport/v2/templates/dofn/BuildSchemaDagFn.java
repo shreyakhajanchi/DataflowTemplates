@@ -34,9 +34,9 @@ public class BuildSchemaDagFn extends DoFn<DataGeneratorSchema, DataGeneratorSch
     DataGeneratorSchema processedSchema = SchemaUtils.generateSchemaDAG(schema);
 
     List<String> rootTables =
-        processedSchema.tables().values().stream()
-            .filter(DataGeneratorTable::isRoot)
-            .map(DataGeneratorTable::name)
+        processedSchema.getTables().values().stream()
+            .filter(DataGeneratorTable::getRoot)
+            .map(DataGeneratorTable::getName)
             .collect(Collectors.toList());
     LOG.info("Root tables in the job: {}", rootTables);
 

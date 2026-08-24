@@ -24,7 +24,7 @@ import org.apache.beam.sdk.values.Row;
 @AutoValue
 @DefaultCoder(GeneratedRecordCoder.class)
 public abstract class GeneratedRecord {
-  public abstract String tableName();
+  public abstract String getTableName();
 
   public abstract Row primaryKeyValues();
 

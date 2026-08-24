@@ -31,6 +31,9 @@ import com.google.common.annotations.VisibleForTesting;
 import java.util.List;
 import java.util.function.Consumer;
 import net.datafaker.Faker;
+import org.apache.beam.sdk.coders.ListCoder;
+import org.apache.beam.sdk.coders.SerializableCoder;
+import org.apache.beam.sdk.coders.VarLongCoder;
 import org.apache.beam.sdk.metrics.Metrics;
 import org.apache.beam.sdk.state.MapState;
 import org.apache.beam.sdk.state.StateSpec;
@@ -78,7 +81,8 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
   private final String customClassName;
 
   @StateId("eventQueue")
-  private final StateSpec<MapState<Long, List<LifecycleEvent>>> eventQueueSpec = StateSpecs.map();
+  private final StateSpec<MapState<Long, List<LifecycleEvent>>> eventQueueSpec =
+      StateSpecs.map(VarLongCoder.of(), ListCoder.of(SerializableCoder.of(LifecycleEvent.class)));
 
   @StateId("activeTimestamps")
   private final StateSpec<ValueState<List<Long>>> activeTimestampsSpec = StateSpecs.value();
@@ -148,7 +152,7 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
     ensureSchemaInitialized(c, insertTopoOrderState);
 
     GeneratedRecord record = c.element().getValue();
-    String tableName = record.tableName();
+    String tableName = record.getTableName();
     Row pkValues = record.primaryKeyValues();
 
     try {

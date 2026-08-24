@@ -163,7 +163,7 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
         .primaryKeys(table.primaryKeyColumns())
         .foreignKeys(foreignKeysBuilder.build())
         .uniqueKeys(uniqueKeysBuilder.build())
-        .isRoot(true)
+        .setRoot(true)
         .insertQps(0)
         .updateQps(0) // Default value
         .deleteQps(0) // Default value
@@ -175,9 +175,9 @@ public class MySqlSchemaFetcher implements SinkSchemaFetcher {
     return DataGeneratorColumn.builder()
         .name(column.name())
         .logicalType(typeMapper.getLogicalType(column.type(), null, column.size()))
-        .isNullable(column.isNullable())
-        .isGenerated(column.isGenerated())
-        .isPrimaryKey(primaryKeys.contains(column.name()))
+        .setNullable(column.isNullable())
+        .setGenerated(column.isGenerated())
+        .setPrimaryKey(primaryKeys.contains(column.name()))
         .size(column.size())
         .precision(column.precision())
         .scale(column.scale())

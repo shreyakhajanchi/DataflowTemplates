@@ -52,8 +52,8 @@ public class BuildSchemaDagFnTest {
     verify(receiver).output(captor.capture());
     DataGeneratorSchema resolvedSchema = captor.getValue();
     assertNotNull(resolvedSchema);
-    DataGeneratorTable resolvedTable = resolvedSchema.tables().get("table1");
+    DataGeneratorTable resolvedTable = resolvedSchema.getTables().get("table1");
     assertNotNull(resolvedTable);
-    assertTrue(resolvedTable.isRoot()); // It has no FKs, so it should be root
+    assertTrue(resolvedTable.getRoot()); // It has no FKs, so it should be root
   }
 }

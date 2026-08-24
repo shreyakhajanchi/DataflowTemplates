@@ -23,11 +23,11 @@ import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 @AutoValue
 @DefaultSchema(AutoValueSchema.class)
 public abstract class BufferKey {
-  public abstract String tableName();
+  public abstract String getTableName();
 
-  public abstract String shardId();
+  public abstract String getShardId();
 
-  public abstract String operation();
+  public abstract String getOperation();
 
   public static BufferKey create(String tableName, String shardId, String operation) {
     return new AutoValue_BufferKey(tableName, shardId, operation);

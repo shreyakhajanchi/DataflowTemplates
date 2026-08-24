@@ -227,15 +227,15 @@ public class MySqlDataWriter implements DataWriter {
     List<DataGeneratorColumn> cols = writableColumns(table);
     if (cols.isEmpty()) {
       throw new IllegalArgumentException(
-          "Table " + table.name() + " has no writable columns for INSERT / UPDATE.");
+          "Table " + table.getName() + " has no writable columns for INSERT / UPDATE.");
     }
     StringBuilder sql = new StringBuilder("INSERT INTO ");
-    sql.append(quote(table.name())).append(" (");
+    sql.append(quote(table.getName())).append(" (");
     for (int i = 0; i < cols.size(); i++) {
       if (i > 0) {
         sql.append(", ");
       }
-      sql.append(quote(cols.get(i).name()));
+      sql.append(quote(cols.get(i).getName()));
     }
     sql.append(") VALUES (");
     for (int i = 0; i < cols.size(); i++) {
@@ -250,14 +250,14 @@ public class MySqlDataWriter implements DataWriter {
     if (setCols.isEmpty()) {
       // PK-only table: use a harmless self-assignment on the first column so MySQL still parses
       // the clause and retries remain idempotent.
-      String firstCol = quote(cols.get(0).name());
+      String firstCol = quote(cols.get(0).getName());
       sql.append(firstCol).append(" = ").append(firstCol);
     } else {
       for (int i = 0; i < setCols.size(); i++) {
         if (i > 0) {
           sql.append(", ");
         }
-        String c = quote(setCols.get(i).name());
+        String c = quote(setCols.get(i).getName());
         sql.append(c).append(" = VALUES(").append(c).append(")");
       }
     }
@@ -266,13 +266,13 @@ public class MySqlDataWriter implements DataWriter {
 
   @VisibleForTesting
   static String buildDeleteSql(DataGeneratorTable table) {
-    List<String> pkNames = table.primaryKeys();
+    List<String> pkNames = table.getPrimaryKeys();
     if (pkNames == null || pkNames.isEmpty()) {
       throw new IllegalStateException(
-          "Table " + table.name() + " has no primary key; cannot build DELETE.");
+          "Table " + table.getName() + " has no primary key; cannot build DELETE.");
     }
     StringBuilder sql = new StringBuilder("DELETE FROM ");
-    sql.append(quote(table.name())).append(" WHERE ");
+    sql.append(quote(table.getName())).append(" WHERE ");
     for (int i = 0; i < pkNames.size(); i++) {
       if (i > 0) {
         sql.append(" AND ");
@@ -284,7 +284,7 @@ public class MySqlDataWriter implements DataWriter {
 
   private static List<DataGeneratorColumn> writableColumns(DataGeneratorTable table) {
     ImmutableList.Builder<DataGeneratorColumn> builder = ImmutableList.builder();
-    for (DataGeneratorColumn col : table.columns()) {
+    for (DataGeneratorColumn col : table.getColumns()) {
       if (col.isSkipped() || col.isGenerated()) {
         continue;
       }
@@ -294,10 +294,10 @@ public class MySqlDataWriter implements DataWriter {
   }
 
   private static List<DataGeneratorColumn> nonPrimaryKeyWritableColumns(DataGeneratorTable table) {
-    List<String> pkNames = table.primaryKeys();
+    List<String> pkNames = table.getPrimaryKeys();
     ImmutableList.Builder<DataGeneratorColumn> builder = ImmutableList.builder();
     for (DataGeneratorColumn col : writableColumns(table)) {
-      if (pkNames != null && pkNames.contains(col.name())) {
+      if (pkNames != null && pkNames.contains(col.getName())) {
         continue;
       }
       builder.add(col);
@@ -306,13 +306,13 @@ public class MySqlDataWriter implements DataWriter {
   }
 
   private static DataGeneratorColumn findColumn(DataGeneratorTable table, String name) {
-    for (DataGeneratorColumn col : table.columns()) {
-      if (col.name().equals(name)) {
+    for (DataGeneratorColumn col : table.getColumns()) {
+      if (col.getName().equals(name)) {
         return col;
       }
     }
     throw new IllegalStateException(
-        "Primary key column '" + name + "' not found on table " + table.name());
+        "Primary key column '" + name + "' not found on table " + table.getName());
   }
 
   @VisibleForTesting
@@ -321,7 +321,7 @@ public class MySqlDataWriter implements DataWriter {
       throws SQLException {
     if (operation == MutationType.DELETE) {
       int idx = 1;
-      for (String pkName : table.primaryKeys()) {
+      for (String pkName : table.getPrimaryKeys()) {
         DataGeneratorColumn pkCol = findColumn(table, pkName);
         setParameter(statement, idx++, pkCol, fetchFromRow(row, pkName));
       }
@@ -331,7 +331,7 @@ public class MySqlDataWriter implements DataWriter {
       // VALUES(col) on the server side, so no extra parameters are needed).
       int idx = 1;
       for (DataGeneratorColumn col : writableColumns(table)) {
-        setParameter(statement, idx++, col, fetchFromRow(row, col.name()));
+        setParameter(statement, idx++, col, fetchFromRow(row, col.getName()));
       }
     }
   }
@@ -350,10 +350,10 @@ public class MySqlDataWriter implements DataWriter {
       PreparedStatement statement, int index, DataGeneratorColumn column, Object value)
       throws SQLException {
     if (value == null) {
-      statement.setNull(index, jdbcTypeFor(column.logicalType()));
+      statement.setNull(index, jdbcTypeFor(column.getLogicalType()));
       return;
     }
-    switch (column.logicalType()) {
+    switch (column.getLogicalType()) {
       case STRING:
       case JSON:
         statement.setString(index, value.toString());

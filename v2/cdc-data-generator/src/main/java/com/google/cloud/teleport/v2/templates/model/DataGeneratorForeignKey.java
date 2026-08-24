@@ -16,7 +16,7 @@
 package com.google.cloud.teleport.v2.templates.model;
 
 import com.google.auto.value.AutoValue;
-import com.google.common.collect.ImmutableList;
+import java.util.List;
 import org.apache.beam.sdk.schemas.AutoValueSchema;
 import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 
@@ -26,16 +26,16 @@ import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 public abstract class DataGeneratorForeignKey {
 
   /** The name of the foreign key constraint. */
-  public abstract String name();
+  public abstract String getName();
 
   /** The table this foreign key references. */
-  public abstract String referencedTable();
+  public abstract String getReferencedTable();
 
   /** The columns in this table that make up the foreign key. */
-  public abstract ImmutableList<String> keyColumns();
+  public abstract List<String> getKeyColumns();
 
   /** The columns in the referenced table that are referenced. */
-  public abstract ImmutableList<String> referencedColumns();
+  public abstract List<String> getReferencedColumns();
 
   public static Builder builder() {
     return new AutoValue_DataGeneratorForeignKey.Builder();
@@ -45,11 +45,27 @@ public abstract class DataGeneratorForeignKey {
   public abstract static class Builder {
     public abstract Builder name(String name);
 
+    public Builder setName(String name) {
+      return name(name);
+    }
+
     public abstract Builder referencedTable(String referencedTable);
 
-    public abstract Builder keyColumns(ImmutableList<String> keyColumns);
+    public Builder setReferencedTable(String referencedTable) {
+      return referencedTable(referencedTable);
+    }
 
-    public abstract Builder referencedColumns(ImmutableList<String> referencedColumns);
+    public abstract Builder keyColumns(List<String> keyColumns);
+
+    public Builder setKeyColumns(List<String> keyColumns) {
+      return keyColumns(keyColumns);
+    }
+
+    public abstract Builder referencedColumns(List<String> referencedColumns);
+
+    public Builder setReferencedColumns(List<String> referencedColumns) {
+      return referencedColumns(referencedColumns);
+    }
 
     public abstract DataGeneratorForeignKey build();
   }

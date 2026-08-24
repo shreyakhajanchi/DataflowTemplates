@@ -41,7 +41,7 @@ public class SchemaUtils {
    * tracks into sequential execution chains sorted by QPS.
    */
   public static DataGeneratorSchema generateSchemaDAG(DataGeneratorSchema schema) {
-    Map<String, DataGeneratorTable> tableMap = schema.tables();
+    Map<String, DataGeneratorTable> tableMap = schema.getTables();
     Map<String, List<String>> parentToSequenceChild = new HashMap<>();
     Set<String> hasSequenceParent = new HashSet<>();
 
@@ -59,19 +59,19 @@ public class SchemaUtils {
       }
 
       Set<String> lineageNames =
-          uniqueParents.stream().map(DataGeneratorTable::name).collect(Collectors.toSet());
-      lineageNames.add(childTable.name());
+          uniqueParents.stream().map(DataGeneratorTable::getName).collect(Collectors.toSet());
+      lineageNames.add(childTable.getName());
 
       // Filter the master global order to keep only this table's specific lineage
       List<DataGeneratorTable> executionChain =
           globalOrder.stream()
-              .filter(t -> lineageNames.contains(t.name()))
+              .filter(t -> lineageNames.contains(t.getName()))
               .collect(Collectors.toList());
 
       // Link the sorted lineage chain together consecutively (P1 -> P2 -> ... -> Child)
       for (int i = 0; i < executionChain.size() - 1; i++) {
-        String currentTable = executionChain.get(i).name();
-        String nextTable = executionChain.get(i + 1).name();
+        String currentTable = executionChain.get(i).getName();
+        String nextTable = executionChain.get(i + 1).getName();
 
         List<String> sequenceChildren =
             parentToSequenceChild.computeIfAbsent(currentTable, k -> new ArrayList<>());
@@ -85,7 +85,7 @@ public class SchemaUtils {
     // 3. Construct Final Table Definitions
     ImmutableMap.Builder<String, DataGeneratorTable> newTablesBuilder = ImmutableMap.builder();
     for (DataGeneratorTable table : tableMap.values()) {
-      String tableName = table.name();
+      String tableName = table.getName();
       List<String> sequenceChildren =
           parentToSequenceChild.getOrDefault(tableName, ImmutableList.of());
       // A table is a root if it is not triggered as a sequence child by any other table
@@ -100,13 +100,13 @@ public class SchemaUtils {
       // during cascading generation in DataGeneratorEngine.
       boolean hasAncestorDelete =
           hasPhysicalAncestorWithDeleteQps(table, tableMap, new HashSet<>());
-      Integer finalDeleteQps = hasAncestorDelete ? Integer.valueOf(0) : table.deleteQps();
+      Integer finalDeleteQps = hasAncestorDelete ? Integer.valueOf(0) : table.getDeleteQps();
 
       newTablesBuilder.put(
           tableName,
           table.toBuilder()
               .childTables(ImmutableList.copyOf(sequenceChildren))
-              .isRoot(isRoot)
+              .setRoot(isRoot)
               .deleteQps(finalDeleteQps)
               .build());
 
@@ -137,14 +137,14 @@ public class SchemaUtils {
 
     // Map physical dependencies (interleaving and FKs) into graph directed edges
     for (DataGeneratorTable table : tableMap.values()) {
-      String child = table.name();
+      String child = table.getName();
       List<String> parents = new ArrayList<>();
-      if (table.interleavedInTable() != null) {
-        parents.add(table.interleavedInTable());
+      if (table.getInterleavedInTable() != null) {
+        parents.add(table.getInterleavedInTable());
       }
-      if (table.foreignKeys() != null) {
-        for (DataGeneratorForeignKey fk : table.foreignKeys()) {
-          parents.add(fk.referencedTable());
+      if (table.getForeignKeys() != null) {
+        for (DataGeneratorForeignKey fk : table.getForeignKeys()) {
+          parents.add(fk.getReferencedTable());
         }
       }
 
@@ -160,11 +160,11 @@ public class SchemaUtils {
     PriorityQueue<DataGeneratorTable> queue =
         new PriorityQueue<>(
             Comparator.comparing(
-                    (DataGeneratorTable t) -> t.isRoot() != null && t.isRoot(),
+                    (DataGeneratorTable t) -> t.getRoot() != null && t.getRoot(),
                     Comparator.reverseOrder())
                 .thenComparingInt(
-                    (DataGeneratorTable t) -> t.insertQps() != null ? t.insertQps() : 0)
-                .thenComparing(DataGeneratorTable::name));
+                    (DataGeneratorTable t) -> t.getInsertQps() != null ? t.getInsertQps() : 0)
+                .thenComparing(DataGeneratorTable::getName));
 
     for (Map.Entry<String, Integer> entry : inDegree.entrySet()) {
       if (entry.getValue() == 0) {
@@ -177,7 +177,7 @@ public class SchemaUtils {
       DataGeneratorTable current = queue.poll();
       globalOrder.add(current);
 
-      for (String neighbor : adjacencyList.get(current.name())) {
+      for (String neighbor : adjacencyList.get(current.getName())) {
         int updatedInDegree = inDegree.get(neighbor) - 1;
         inDegree.put(neighbor, updatedInDegree);
         if (updatedInDegree == 0) {
@@ -198,15 +198,15 @@ public class SchemaUtils {
       DataGeneratorTable table,
       Map<String, DataGeneratorTable> tableMap,
       Set<DataGeneratorTable> uniqueParents) {
-    if (table.interleavedInTable() != null) {
-      DataGeneratorTable parent = tableMap.get(table.interleavedInTable());
+    if (table.getInterleavedInTable() != null) {
+      DataGeneratorTable parent = tableMap.get(table.getInterleavedInTable());
       if (parent != null && uniqueParents.add(parent)) {
         collectAncestors(parent, tableMap, uniqueParents);
       }
     }
-    if (table.foreignKeys() != null) {
-      for (DataGeneratorForeignKey fk : table.foreignKeys()) {
-        DataGeneratorTable parent = tableMap.get(fk.referencedTable());
+    if (table.getForeignKeys() != null) {
+      for (DataGeneratorForeignKey fk : table.getForeignKeys()) {
+        DataGeneratorTable parent = tableMap.get(fk.getReferencedTable());
         if (parent != null && uniqueParents.add(parent)) {
           collectAncestors(parent, tableMap, uniqueParents);
         }
@@ -220,13 +220,13 @@ public class SchemaUtils {
    */
   private static boolean hasPhysicalAncestorWithDeleteQps(
       DataGeneratorTable table, Map<String, DataGeneratorTable> tableMap, Set<String> visited) {
-    if (table == null || !visited.add(table.name())) {
+    if (table == null || !visited.add(table.getName())) {
       return false;
     }
-    if (table.interleavedInTable() != null) {
-      DataGeneratorTable p = tableMap.get(table.interleavedInTable());
+    if (table.getInterleavedInTable() != null) {
+      DataGeneratorTable p = tableMap.get(table.getInterleavedInTable());
       if (p != null) {
-        if (p.deleteQps() != null && p.deleteQps() > 0) {
+        if (p.getDeleteQps() != null && p.getDeleteQps() > 0) {
           return true;
         }
         if (hasPhysicalAncestorWithDeleteQps(p, tableMap, visited)) {
@@ -234,11 +234,11 @@ public class SchemaUtils {
         }
       }
     }
-    if (table.foreignKeys() != null) {
-      for (DataGeneratorForeignKey fk : table.foreignKeys()) {
-        DataGeneratorTable p = tableMap.get(fk.referencedTable());
+    if (table.getForeignKeys() != null) {
+      for (DataGeneratorForeignKey fk : table.getForeignKeys()) {
+        DataGeneratorTable p = tableMap.get(fk.getReferencedTable());
         if (p != null) {
-          if (p.deleteQps() != null && p.deleteQps() > 0) {
+          if (p.getDeleteQps() != null && p.getDeleteQps() > 0) {
             return true;
           }
           if (hasPhysicalAncestorWithDeleteQps(p, tableMap, visited)) {
@@ -252,7 +252,7 @@ public class SchemaUtils {
 
   /** Builds the global insertion order across all tables in the schema for pipeline execution. */
   public static List<String> buildInsertTopoOrder(DataGeneratorSchema schema) {
-    List<DataGeneratorTable> sortedTables = sortGloballyTopologically(schema.tables());
-    return sortedTables.stream().map(DataGeneratorTable::name).collect(Collectors.toList());
+    List<DataGeneratorTable> sortedTables = sortGloballyTopologically(schema.getTables());
+    return sortedTables.stream().map(DataGeneratorTable::getName).collect(Collectors.toList());
   }
 }

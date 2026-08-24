@@ -18,8 +18,11 @@ package com.google.cloud.teleport.v2.templates.model;
 import com.google.cloud.teleport.v2.spanner.migrations.shard.Shard;
 import java.util.List;
 import java.util.Objects;
+import org.apache.beam.sdk.schemas.JavaFieldSchema;
+import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 
 /** Configuration for a MySQL sink, containing ordered shard details. */
+@DefaultSchema(JavaFieldSchema.class)
 public class MySqlSinkConfig implements SinkConfig {
 
   private List<Shard> shards;

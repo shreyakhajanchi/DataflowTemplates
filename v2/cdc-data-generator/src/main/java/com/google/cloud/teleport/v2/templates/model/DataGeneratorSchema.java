@@ -16,7 +16,6 @@
 package com.google.cloud.teleport.v2.templates.model;
 
 import com.google.auto.value.AutoValue;
-import com.google.common.collect.ImmutableMap;
 import java.util.Map;
 import org.apache.beam.sdk.schemas.AutoValueSchema;
 import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
@@ -27,7 +26,7 @@ import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 public abstract class DataGeneratorSchema {
 
   /** Map of table name to table definition. */
-  public abstract ImmutableMap<String, DataGeneratorTable> tables();
+  public abstract Map<String, DataGeneratorTable> getTables();
 
   public static Builder builder() {
     return new AutoValue_DataGeneratorSchema.Builder();
@@ -36,6 +35,10 @@ public abstract class DataGeneratorSchema {
   @AutoValue.Builder
   public abstract static class Builder {
     public abstract Builder tables(Map<String, DataGeneratorTable> tables);
+
+    public Builder setTables(Map<String, DataGeneratorTable> tables) {
+      return tables(tables);
+    }
 
     public abstract DataGeneratorSchema build();
   }

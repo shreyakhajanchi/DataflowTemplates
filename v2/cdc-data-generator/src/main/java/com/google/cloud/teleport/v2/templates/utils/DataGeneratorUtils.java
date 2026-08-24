@@ -66,7 +66,7 @@ public final class DataGeneratorUtils {
       CustomDataGenerator customGenerator) {
     if (customGenerator != null) {
       try {
-        Object customValue = customGenerator.generate(tableName, column.name());
+        Object customValue = customGenerator.generate(tableName, column.getName());
         if (customValue != null) {
           if (CustomDataGenerator.EXPLICIT_NULL.equals(customValue)) {
             return null;
@@ -78,15 +78,15 @@ public final class DataGeneratorUtils {
             "CustomDataGenerator failed for table '"
                 + tableName
                 + "' column '"
-                + column.name()
+                + column.getName()
                 + "'",
             e);
       }
     }
-    LogicalType type = column.logicalType();
-    Long size = column.size();
-    if (column.fakerExpression() != null) {
-      Object override = column.fakerExpression();
+    LogicalType type = column.getLogicalType();
+    Long size = column.getSize();
+    if (column.getFakerExpression() != null) {
+      Object override = column.getFakerExpression();
       if (override instanceof String) {
         return generateFromStringExpression((String) override, column, faker);
       }
@@ -96,11 +96,11 @@ public final class DataGeneratorUtils {
           return MAPPER.writeValueAsString(resolvedTree);
         } catch (Exception e) {
           throw new RuntimeException(
-              "Failed to serialize nested JSON override for column " + column.name(), e);
+              "Failed to serialize nested JSON override for column " + column.getName(), e);
         }
       }
       throw new IllegalArgumentException(
-          "Unsupported nested override for non-JSON column '" + column.name() + "'.");
+          "Unsupported nested override for non-JSON column '" + column.getName() + "'.");
     } else {
       switch (type) {
         case STRING:
@@ -136,10 +136,11 @@ public final class DataGeneratorUtils {
           return (long) ThreadLocalRandom.current().nextInt();
         case FLOAT64:
           {
-            int scale = column.scale() != null ? column.scale() : Constants.DEFAULT_NUMERIC_SCALE;
+            int scale =
+                column.getScale() != null ? column.getScale() : Constants.DEFAULT_NUMERIC_SCALE;
             int precision =
-                column.precision() != null
-                    ? column.precision()
+                column.getPrecision() != null
+                    ? column.getPrecision()
                     : Constants.DEFAULT_NUMERIC_PRECISION + 5;
             double maxVal = Math.pow(10, precision - scale) - 1.0 / Math.pow(10, scale);
             double minVal = -maxVal;
@@ -208,7 +209,7 @@ public final class DataGeneratorUtils {
 
   /** Convenience overload accepting the full column — kept so callers don't branch at callsite. */
   public static Schema.FieldType mapToBeamFieldType(DataGeneratorColumn column) {
-    return mapToBeamFieldType(column.logicalType());
+    return mapToBeamFieldType(column.getLogicalType());
   }
 
   /**
@@ -224,12 +225,12 @@ public final class DataGeneratorUtils {
   @VisibleForTesting
   static BigDecimal generateNumeric(DataGeneratorColumn column, Faker faker) {
     int prec =
-        (column.precision() != null && column.precision() > 0)
-            ? column.precision()
+        (column.getPrecision() != null && column.getPrecision() > 0)
+            ? column.getPrecision()
             : Constants.DEFAULT_NUMERIC_PRECISION;
     int sc =
-        (column.scale() != null && column.scale() >= 0)
-            ? column.scale()
+        (column.getScale() != null && column.getScale() >= 0)
+            ? column.getScale()
             : Constants.DEFAULT_NUMERIC_SCALE;
     if (sc > prec) {
       throw new IllegalArgumentException(
@@ -238,7 +239,7 @@ public final class DataGeneratorUtils {
               + " cannot be greater than precision "
               + prec
               + " for numeric column '"
-              + column.name()
+              + column.getName()
               + "'.");
     }
 
@@ -305,7 +306,10 @@ public final class DataGeneratorUtils {
       raw = faker.expression(expression);
     } catch (Exception e) {
       throw new RuntimeException(
-          "Faker expression for column '" + column.name() + "' failed to evaluate: " + expression,
+          "Faker expression for column '"
+              + column.getName()
+              + "' failed to evaluate: "
+              + expression,
           e);
     }
     return convertToLogicalType(raw, column);
@@ -313,9 +317,10 @@ public final class DataGeneratorUtils {
 
   private static Object convertToLogicalType(String raw, DataGeneratorColumn column) {
     if (raw == null) {
-      throw new IllegalArgumentException("Cannot convert null value for column " + column.name());
+      throw new IllegalArgumentException(
+          "Cannot convert null value for column " + column.getName());
     }
-    LogicalType type = column.logicalType();
+    LogicalType type = column.getLogicalType();
     try {
       switch (type) {
         case STRING:
@@ -330,8 +335,8 @@ public final class DataGeneratorUtils {
           {
             BigDecimal bd = new BigDecimal(raw.trim().replace(",", ""));
             int sc =
-                (column.scale() != null && column.scale() >= 0)
-                    ? column.scale()
+                (column.getScale() != null && column.getScale() >= 0)
+                    ? column.getScale()
                     : Constants.DEFAULT_NUMERIC_SCALE;
             return bd.setScale(sc, RoundingMode.HALF_UP);
           }
@@ -356,13 +361,13 @@ public final class DataGeneratorUtils {
     } catch (IllegalArgumentException | java.time.DateTimeException e) {
       throw new RuntimeException(
           "Generator output for column '"
-              + column.name()
+              + column.getName()
               + "' did not parse as "
               + type
               + ": got '"
               + raw
               + "' from expression '"
-              + column.fakerExpression()
+              + column.getFakerExpression()
               + "'",
           e);
     }

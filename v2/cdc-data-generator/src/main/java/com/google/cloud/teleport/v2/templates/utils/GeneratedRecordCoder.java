@@ -39,7 +39,7 @@ public class GeneratedRecordCoder extends CustomCoder<GeneratedRecord> {
 
   @Override
   public void encode(GeneratedRecord value, OutputStream outStream) throws IOException {
-    StringUtf8Coder.of().encode(value.tableName(), outStream);
+    StringUtf8Coder.of().encode(value.getTableName(), outStream);
     DynamicRowCoder.of().encode(value.primaryKeyValues(), outStream);
   }
 

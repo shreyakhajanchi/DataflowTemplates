@@ -54,7 +54,7 @@ public class SelectTableTest {
         DataGeneratorTable.builder()
             .name("A")
             .insertQps(10)
-            .isRoot(true)
+            .setRoot(true)
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
@@ -68,7 +68,7 @@ public class SelectTableTest {
         DataGeneratorTable.builder()
             .name("B")
             .insertQps(100)
-            .isRoot(false)
+            .setRoot(false)
             .interleavedInTable("A")
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
@@ -83,7 +83,7 @@ public class SelectTableTest {
         DataGeneratorTable.builder()
             .name("C")
             .insertQps(50)
-            .isRoot(true)
+            .setRoot(true)
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
@@ -112,9 +112,9 @@ public class SelectTableTest {
     double probC = 0;
 
     for (Pair<DataGeneratorTable, Double> pair : pmf) {
-      if (pair.getKey().name().equals("A")) {
+      if (pair.getKey().getName().equals("A")) {
         probA = pair.getValue();
-      } else if (pair.getKey().name().equals("C")) {
+      } else if (pair.getKey().getName().equals("C")) {
         probC = pair.getValue();
       }
     }
@@ -129,7 +129,7 @@ public class SelectTableTest {
         DataGeneratorTable.builder()
             .name("A")
             .insertQps(10)
-            .isRoot(true)
+            .setRoot(true)
             .columns(ImmutableList.of())
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
@@ -158,7 +158,7 @@ public class SelectTableTest {
               int count = 0;
               for (DataGeneratorTable t : iterable) {
                 count++;
-                assertEquals("A", t.name());
+                assertEquals("A", t.getName());
               }
               assertEquals(2, count);
               return null;

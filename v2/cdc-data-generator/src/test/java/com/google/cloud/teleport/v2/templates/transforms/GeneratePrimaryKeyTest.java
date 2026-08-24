@@ -54,7 +54,7 @@ public class GeneratePrimaryKeyTest {
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(true)
+            .setRoot(true)
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
@@ -77,7 +77,7 @@ public class GeneratePrimaryKeyTest {
             .primaryKeys(ImmutableList.of("b", "a"))
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(true)
+            .setRoot(true)
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
@@ -86,8 +86,8 @@ public class GeneratePrimaryKeyTest {
 
     List<DataGeneratorColumn> pkCols = GeneratePrimaryKeyFn.primaryKeyColumns(table);
     assertEquals(2, pkCols.size());
-    assertEquals("b", pkCols.get(0).name());
-    assertEquals("a", pkCols.get(1).name());
+    assertEquals("b", pkCols.get(0).getName());
+    assertEquals("a", pkCols.get(1).getName());
   }
 
   @Test
@@ -102,7 +102,7 @@ public class GeneratePrimaryKeyTest {
             .primaryKeys(ImmutableList.of("id", "seq"))
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(true)
+            .setRoot(true)
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
@@ -148,7 +148,7 @@ public class GeneratePrimaryKeyTest {
             .primaryKeys(ImmutableList.of("id"))
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(true)
+            .setRoot(true)
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
@@ -188,7 +188,7 @@ public class GeneratePrimaryKeyTest {
             .primaryKeys(ImmutableList.of("id"))
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(true)
+            .setRoot(true)
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
@@ -202,7 +202,7 @@ public class GeneratePrimaryKeyTest {
             .primaryKeys(ImmutableList.of("a", "b"))
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(true)
+            .setRoot(true)
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
@@ -256,7 +256,7 @@ public class GeneratePrimaryKeyTest {
             .primaryKeys(ImmutableList.of("id"))
             .foreignKeys(ImmutableList.of())
             .uniqueKeys(ImmutableList.of())
-            .isRoot(true)
+            .setRoot(true)
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
@@ -294,9 +294,9 @@ public class GeneratePrimaryKeyTest {
     return DataGeneratorColumn.builder()
         .name(name)
         .logicalType(type)
-        .isNullable(false)
-        .isSkipped(false)
-        .isGenerated(false)
+        .setNullable(false)
+        .setSkipped(false)
+        .setGenerated(false)
         .size(size)
         .precision(precision)
         .scale(scale)

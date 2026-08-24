@@ -16,10 +16,11 @@
 package com.google.cloud.teleport.v2.templates.model;
 
 import com.google.auto.value.AutoValue;
-import com.google.common.collect.ImmutableList;
+import java.util.List;
 import javax.annotation.Nullable;
 import org.apache.beam.sdk.schemas.AutoValueSchema;
 import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
+import org.apache.beam.sdk.schemas.annotations.SchemaFieldName;
 
 /** Represents a table in the data generator schema. */
 @AutoValue
@@ -27,52 +28,53 @@ import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 public abstract class DataGeneratorTable {
 
   /** The name of the table. */
-  public abstract String name();
+  public abstract String getName();
 
   /** The columns of the table. */
   // TODO(khajanchi): Consider using a map of columns instead of list
-  public abstract ImmutableList<DataGeneratorColumn> columns();
+  public abstract List<DataGeneratorColumn> getColumns();
 
   /** The primary key column names. */
-  public abstract ImmutableList<String> primaryKeys();
+  public abstract List<String> getPrimaryKeys();
 
   /** The name of the table this table is interleaved in, if any (Spanner specific). */
   @Nullable
-  public abstract String interleavedInTable();
+  public abstract String getInterleavedInTable();
 
   /** Foreign keys defined on this table. */
-  public abstract ImmutableList<DataGeneratorForeignKey> foreignKeys();
+  public abstract List<DataGeneratorForeignKey> getForeignKeys();
 
   /** Unique keys/indexes defined on this table. */
-  public abstract ImmutableList<DataGeneratorUniqueKey> uniqueKeys();
+  public abstract List<DataGeneratorUniqueKey> getUniqueKeys();
 
   /** Whether this table is a root table (not interleaved/child). */
   @Nullable
-  public abstract Boolean isRoot();
+  @SchemaFieldName("isRoot")
+  public abstract Boolean getRoot();
 
   /** The QPS for inserts. */
   @Nullable
-  public abstract Integer insertQps();
+  public abstract Integer getInsertQps();
 
   /** The QPS for updates. */
   @Nullable
-  public abstract Integer updateQps();
+  public abstract Integer getUpdateQps();
 
   /** The QPS for deletes. */
   @Nullable
-  public abstract Integer deleteQps();
+  public abstract Integer getDeleteQps();
 
   /** The number of records to generate for this table for each record of the parent table. */
   @Nullable
-  public abstract Double recordsPerTick();
+  public abstract Double getRecordsPerTick();
 
   /** The name of the parent table that drives generation for this table (if any). */
   @Nullable
-  public abstract String generatorParent();
+  public abstract String getGeneratorParent();
 
   /** The names of the tables that are children of this table in the generation hierarchy. */
   @Nullable
-  public abstract ImmutableList<String> childTables();
+  public abstract List<String> getChildTables();
 
   public abstract Builder toBuilder();
 
@@ -84,29 +86,81 @@ public abstract class DataGeneratorTable {
   public abstract static class Builder {
     public abstract Builder name(String name);
 
-    public abstract Builder columns(ImmutableList<DataGeneratorColumn> columns);
+    public Builder setName(String name) {
+      return name(name);
+    }
 
-    public abstract Builder primaryKeys(ImmutableList<String> primaryKeys);
+    public abstract Builder columns(List<DataGeneratorColumn> columns);
+
+    public Builder setColumns(List<DataGeneratorColumn> columns) {
+      return columns(columns);
+    }
+
+    public abstract Builder primaryKeys(List<String> primaryKeys);
+
+    public Builder setPrimaryKeys(List<String> primaryKeys) {
+      return primaryKeys(primaryKeys);
+    }
 
     public abstract Builder interleavedInTable(@Nullable String interleavedInTable);
 
-    public abstract Builder foreignKeys(ImmutableList<DataGeneratorForeignKey> foreignKeys);
+    public Builder setInterleavedInTable(@Nullable String interleavedInTable) {
+      return interleavedInTable(interleavedInTable);
+    }
 
-    public abstract Builder uniqueKeys(ImmutableList<DataGeneratorUniqueKey> uniqueKeys);
+    public abstract Builder foreignKeys(List<DataGeneratorForeignKey> foreignKeys);
 
-    public abstract Builder isRoot(@Nullable Boolean isRoot);
+    public Builder setForeignKeys(List<DataGeneratorForeignKey> foreignKeys) {
+      return foreignKeys(foreignKeys);
+    }
+
+    public abstract Builder uniqueKeys(List<DataGeneratorUniqueKey> uniqueKeys);
+
+    public Builder setUniqueKeys(List<DataGeneratorUniqueKey> uniqueKeys) {
+      return uniqueKeys(uniqueKeys);
+    }
+
+    public abstract Builder root(@Nullable Boolean root);
+
+    public Builder setRoot(@Nullable Boolean root) {
+      return root(root);
+    }
 
     public abstract Builder insertQps(@Nullable Integer insertQps);
 
+    public Builder setInsertQps(@Nullable Integer insertQps) {
+      return insertQps(insertQps);
+    }
+
     public abstract Builder updateQps(@Nullable Integer updateQps);
+
+    public Builder setUpdateQps(@Nullable Integer updateQps) {
+      return updateQps(updateQps);
+    }
 
     public abstract Builder deleteQps(@Nullable Integer deleteQps);
 
+    public Builder setDeleteQps(@Nullable Integer deleteQps) {
+      return deleteQps(deleteQps);
+    }
+
     public abstract Builder recordsPerTick(@Nullable Double recordsPerTick);
+
+    public Builder setRecordsPerTick(@Nullable Double recordsPerTick) {
+      return recordsPerTick(recordsPerTick);
+    }
 
     public abstract Builder generatorParent(@Nullable String generatorParent);
 
-    public abstract Builder childTables(ImmutableList<String> childTables);
+    public Builder setGeneratorParent(@Nullable String generatorParent) {
+      return generatorParent(generatorParent);
+    }
+
+    public abstract Builder childTables(List<String> childTables);
+
+    public Builder setChildTables(List<String> childTables) {
+      return childTables(childTables);
+    }
 
     public abstract DataGeneratorTable build();
   }
