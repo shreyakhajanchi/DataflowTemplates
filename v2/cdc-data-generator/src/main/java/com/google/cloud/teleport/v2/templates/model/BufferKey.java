@@ -16,16 +16,18 @@
 package com.google.cloud.teleport.v2.templates.model;
 
 import com.google.auto.value.AutoValue;
-import java.io.Serializable;
+import org.apache.beam.sdk.schemas.AutoValueSchema;
+import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 
 /** Type-safe buffering key object for grouping row mutation lists. */
 @AutoValue
-public abstract class BufferKey implements Serializable {
-  public abstract String tableName();
+@DefaultSchema(AutoValueSchema.class)
+public abstract class BufferKey {
+  public abstract String getTableName();
 
-  public abstract String shardId();
+  public abstract String getShardId();
 
-  public abstract String operation();
+  public abstract String getOperation();
 
   public static BufferKey create(String tableName, String shardId, String operation) {
     return new AutoValue_BufferKey(tableName, shardId, operation);

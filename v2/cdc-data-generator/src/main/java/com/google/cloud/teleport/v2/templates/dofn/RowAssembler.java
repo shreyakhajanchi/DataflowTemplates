@@ -52,9 +52,9 @@ final class RowAssembler {
   /** Returns the names of all columns covered by any unique key on {@code table}. */
   static Set<String> uniqueColumnNames(DataGeneratorTable table) {
     Set<String> uniqueColumns = new HashSet<>();
-    if (table.uniqueKeys() != null) {
-      for (DataGeneratorUniqueKey uk : table.uniqueKeys()) {
-        uniqueColumns.addAll(uk.columns());
+    if (table.getUniqueKeys() != null) {
+      for (DataGeneratorUniqueKey uk : table.getUniqueKeys()) {
+        uniqueColumns.addAll(uk.getColumns());
       }
     }
     return uniqueColumns;
@@ -63,9 +63,9 @@ final class RowAssembler {
   /** Returns the names of every column referenced by any foreign key on {@code table}. */
   static Set<String> foreignKeyColumns(DataGeneratorTable table) {
     Set<String> fkColumns = new HashSet<>();
-    if (table.foreignKeys() != null) {
-      for (DataGeneratorForeignKey fk : table.foreignKeys()) {
-        fkColumns.addAll(fk.keyColumns());
+    if (table.getForeignKeys() != null) {
+      for (DataGeneratorForeignKey fk : table.getForeignKeys()) {
+        fkColumns.addAll(fk.getKeyColumns());
       }
     }
     return fkColumns;
@@ -87,37 +87,38 @@ final class RowAssembler {
       CustomDataGenerator customGenerator) {
     Schema.Builder schemaBuilder = Schema.builder();
     List<Object> values = new ArrayList<>();
-    Set<String> pkSet = new HashSet<>(table.primaryKeys());
+    Set<String> pkSet = new HashSet<>(table.getPrimaryKeys());
     Set<String> fkColumns = FK_COLUMNS_CACHE.computeIfAbsent(table, k -> foreignKeyColumns(table));
     Set<String> uniqueColumns =
         UNIQUE_COLUMNS_CACHE.computeIfAbsent(table, k -> uniqueColumnNames(table));
 
-    for (DataGeneratorColumn col : table.columns()) {
+    for (DataGeneratorColumn col : table.getColumns()) {
       if (col.isSkipped()) {
         continue;
       }
       schemaBuilder.addField(
-          Schema.Field.of(col.name(), DataGeneratorUtils.mapToBeamFieldType(col.logicalType())));
-      if (pkSet.contains(col.name())) {
-        values.add(pkValues.get(col.name()));
-      } else if (uniqueColumns.contains(col.name())) {
+          Schema.Field.of(
+              col.getName(), DataGeneratorUtils.mapToBeamFieldType(col.getLogicalType())));
+      if (pkSet.contains(col.getName())) {
+        values.add(pkValues.get(col.getName()));
+      } else if (uniqueColumns.contains(col.getName())) {
         // Unique columns must NOT churn on UPDATE. Preserve the original inserted value from
         // state — re-deriving would either collide with another row's existing value or change
         // the row's logical identity between updates. createReducedRow guarantees every unique
         // column is captured at INSERT time.
         Object originalVal =
-            (originalRow != null && originalRow.getSchema().hasField(col.name()))
-                ? originalRow.getValue(col.name())
+            (originalRow != null && originalRow.getSchema().hasField(col.getName()))
+                ? originalRow.getValue(col.getName())
                 : null;
         values.add(originalVal);
-      } else if (fkColumns.contains(col.name())) {
+      } else if (fkColumns.contains(col.getName())) {
         Object val =
-            (originalRow != null && originalRow.getSchema().hasField(col.name()))
-                ? originalRow.getValue(col.name())
-                : DataGeneratorUtils.generateValue(table.name(), col, faker, customGenerator);
+            (originalRow != null && originalRow.getSchema().hasField(col.getName()))
+                ? originalRow.getValue(col.getName())
+                : DataGeneratorUtils.generateValue(table.getName(), col, faker, customGenerator);
         values.add(val);
       } else {
-        values.add(DataGeneratorUtils.generateValue(table.name(), col, faker, customGenerator));
+        values.add(DataGeneratorUtils.generateValue(table.getName(), col, faker, customGenerator));
       }
     }
     try {
@@ -125,7 +126,7 @@ final class RowAssembler {
     } catch (IllegalArgumentException | ClassCastException e) {
       throw new RuntimeException(
           "Failed to assemble UPDATE event for table '"
-              + table.name()
+              + table.getName()
               + "'. (If using a CustomDataGenerator, check its return types). Expected schema: "
               + schemaBuilder.build()
               + ", Values: "
@@ -141,18 +142,18 @@ final class RowAssembler {
   static Row generateDeleteRow(LinkedHashMap<String, Object> pkValues, DataGeneratorTable table) {
     Schema.Builder schemaBuilder = Schema.builder();
     List<Object> values = new ArrayList<>();
-    Set<String> pkSet = new HashSet<>(table.primaryKeys());
+    Set<String> pkSet = new HashSet<>(table.getPrimaryKeys());
 
-    for (DataGeneratorColumn col : table.columns()) {
+    for (DataGeneratorColumn col : table.getColumns()) {
       if (col.isSkipped()) {
         continue;
       }
-      Schema.FieldType fieldType = DataGeneratorUtils.mapToBeamFieldType(col.logicalType());
-      if (pkSet.contains(col.name())) {
-        schemaBuilder.addField(Schema.Field.of(col.name(), fieldType));
-        values.add(pkValues.get(col.name()));
+      Schema.FieldType fieldType = DataGeneratorUtils.mapToBeamFieldType(col.getLogicalType());
+      if (pkSet.contains(col.getName())) {
+        schemaBuilder.addField(Schema.Field.of(col.getName(), fieldType));
+        values.add(pkValues.get(col.getName()));
       } else {
-        schemaBuilder.addField(Schema.Field.nullable(col.name(), fieldType));
+        schemaBuilder.addField(Schema.Field.nullable(col.getName(), fieldType));
         values.add(null);
       }
     }
@@ -161,7 +162,7 @@ final class RowAssembler {
     } catch (IllegalArgumentException | ClassCastException e) {
       throw new RuntimeException(
           "Failed to assemble DELETE event for table '"
-              + table.name()
+              + table.getName()
               + "'. Expected schema: "
               + schemaBuilder.build()
               + ", Values: "
@@ -177,21 +178,22 @@ final class RowAssembler {
   static Row createReducedRow(Row fullRow, DataGeneratorTable table) {
     Schema.Builder schemaBuilder = Schema.builder();
     List<Object> values = new ArrayList<>();
-    Set<String> pkSet = new HashSet<>(table.primaryKeys());
+    Set<String> pkSet = new HashSet<>(table.getPrimaryKeys());
     Set<String> fkColumns = FK_COLUMNS_CACHE.computeIfAbsent(table, k -> foreignKeyColumns(table));
     Set<String> uniqueColumns =
         UNIQUE_COLUMNS_CACHE.computeIfAbsent(table, k -> uniqueColumnNames(table));
 
-    for (DataGeneratorColumn col : table.columns()) {
+    for (DataGeneratorColumn col : table.getColumns()) {
       if (col.isSkipped()) {
         continue;
       }
-      if (pkSet.contains(col.name())
-          || fkColumns.contains(col.name())
-          || uniqueColumns.contains(col.name())) {
+      if (pkSet.contains(col.getName())
+          || fkColumns.contains(col.getName())
+          || uniqueColumns.contains(col.getName())) {
         schemaBuilder.addField(
-            Schema.Field.of(col.name(), DataGeneratorUtils.mapToBeamFieldType(col.logicalType())));
-        values.add(fullRow.getValue(col.name()));
+            Schema.Field.of(
+                col.getName(), DataGeneratorUtils.mapToBeamFieldType(col.getLogicalType())));
+        values.add(fullRow.getValue(col.getName()));
       }
     }
     if (fullRow.getSchema().hasField(Constants.SHARD_ID_COLUMN_NAME)) {
@@ -204,7 +206,7 @@ final class RowAssembler {
     } catch (IllegalArgumentException | ClassCastException e) {
       throw new RuntimeException(
           "Failed to assemble cached state for table '"
-              + table.name()
+              + table.getName()
               + "'. Expected schema: "
               + schemaBuilder.build()
               + ", Values: "
@@ -223,11 +225,11 @@ final class RowAssembler {
   static Row completeRow(
       DataGeneratorTable table, Row partialRow, Faker faker, CustomDataGenerator customGenerator) {
     boolean hasAllColumns = true;
-    for (DataGeneratorColumn col : table.columns()) {
+    for (DataGeneratorColumn col : table.getColumns()) {
       if (col.isSkipped()) {
         continue;
       }
-      if (!partialRow.getSchema().hasField(col.name())) {
+      if (!partialRow.getSchema().hasField(col.getName())) {
         hasAllColumns = false;
         break;
       }
@@ -238,16 +240,17 @@ final class RowAssembler {
 
     Schema.Builder schemaBuilder = Schema.builder();
     List<Object> values = new ArrayList<>();
-    for (DataGeneratorColumn col : table.columns()) {
+    for (DataGeneratorColumn col : table.getColumns()) {
       if (col.isSkipped()) {
         continue;
       }
       Object val =
-          partialRow.getSchema().hasField(col.name())
-              ? partialRow.getValue(col.name())
-              : DataGeneratorUtils.generateValue(table.name(), col, faker, customGenerator);
+          partialRow.getSchema().hasField(col.getName())
+              ? partialRow.getValue(col.getName())
+              : DataGeneratorUtils.generateValue(table.getName(), col, faker, customGenerator);
       schemaBuilder.addField(
-          Schema.Field.of(col.name(), DataGeneratorUtils.mapToBeamFieldType(col.logicalType())));
+          Schema.Field.of(
+              col.getName(), DataGeneratorUtils.mapToBeamFieldType(col.getLogicalType())));
       values.add(val);
     }
 
@@ -263,7 +266,7 @@ final class RowAssembler {
     } catch (IllegalArgumentException | ClassCastException e) {
       throw new RuntimeException(
           "Failed to assemble INSERT event for table '"
-              + table.name()
+              + table.getName()
               + "'. (If using a CustomDataGenerator, check its return types). Expected schema: "
               + schemaBuilder.build()
               + ", Values: "
@@ -274,12 +277,12 @@ final class RowAssembler {
 
   static LinkedHashMap<String, Object> pkValuesOf(Row row, DataGeneratorTable table) {
     LinkedHashMap<String, Object> pk = new LinkedHashMap<>();
-    for (String pkCol : table.primaryKeys()) {
+    for (String pkCol : table.getPrimaryKeys()) {
       if (!row.getSchema().hasField(pkCol)) {
         throw new IllegalArgumentException(
             String.format(
                 "Required Primary Key column '%s' missing from row schema for table '%s'",
-                pkCol, table.name()));
+                pkCol, table.getName()));
       }
       pk.put(pkCol, row.getValue(pkCol));
     }

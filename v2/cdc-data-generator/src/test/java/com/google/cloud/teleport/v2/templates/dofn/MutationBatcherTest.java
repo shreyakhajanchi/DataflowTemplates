@@ -65,7 +65,7 @@ public class MutationBatcherTest {
             .insertQps(10)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(true)
+            .setRoot(true)
             .recordsPerTick(1.0)
             .build();
 

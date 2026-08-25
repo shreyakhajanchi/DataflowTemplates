@@ -59,9 +59,9 @@ public class SelectTableFn extends DoFn<Long, DataGeneratorTable> {
   public static EnumeratedDistribution<DataGeneratorTable> buildDistribution(
       DataGeneratorSchema schema) {
     List<Pair<DataGeneratorTable, Double>> pmf =
-        schema.tables().values().stream()
-            .filter(DataGeneratorTable::isRoot)
-            .map(table -> new Pair<>(table, (double) table.insertQps()))
+        schema.getTables().values().stream()
+            .filter(DataGeneratorTable::getRoot)
+            .map(table -> new Pair<>(table, (double) table.getInsertQps()))
             .collect(Collectors.toList());
 
     if (pmf.isEmpty()) {

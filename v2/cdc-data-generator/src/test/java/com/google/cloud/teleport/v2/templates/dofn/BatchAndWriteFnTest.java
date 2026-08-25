@@ -115,7 +115,7 @@ public class BatchAndWriteFnTest {
   public void testProcessElement_initializesSchemaWhenNull() throws Exception {
     DataGeneratorTable users = simpleUsersTable();
     DataGeneratorSchema schema =
-        DataGeneratorSchema.builder().tables(ImmutableMap.of(users.name(), users)).build();
+        DataGeneratorSchema.builder().tables(ImmutableMap.of(users.getName(), users)).build();
 
     PCollectionView<DataGeneratorSchema> schemaView = mock(PCollectionView.class);
     ProcessContext c = mock(ProcessContext.class);
@@ -151,7 +151,7 @@ public class BatchAndWriteFnTest {
   public void testProcessElement_skipsSchemaInitializationWhenAlreadyLoaded() throws Exception {
     DataGeneratorTable users = simpleUsersTable();
     DataGeneratorSchema schema =
-        DataGeneratorSchema.builder().tables(ImmutableMap.of(users.name(), users)).build();
+        DataGeneratorSchema.builder().tables(ImmutableMap.of(users.getName(), users)).build();
 
     PCollectionView<DataGeneratorSchema> schemaView = mock(PCollectionView.class);
     ProcessContext c = mock(ProcessContext.class);
@@ -192,7 +192,7 @@ public class BatchAndWriteFnTest {
   public void testProcessElement_normalExecution_flushesDlqWhenPresent() throws Exception {
     DataGeneratorTable users = simpleUsersTable();
     DataGeneratorSchema schema =
-        DataGeneratorSchema.builder().tables(ImmutableMap.of(users.name(), users)).build();
+        DataGeneratorSchema.builder().tables(ImmutableMap.of(users.getName(), users)).build();
 
     PCollectionView<DataGeneratorSchema> schemaView = mock(PCollectionView.class);
     ProcessContext c = mock(ProcessContext.class);
@@ -231,7 +231,7 @@ public class BatchAndWriteFnTest {
   public void testProcessElement_engineFailure_catchesAndOutputsToDlq() throws Exception {
     DataGeneratorTable users = simpleUsersTable();
     DataGeneratorSchema schema =
-        DataGeneratorSchema.builder().tables(ImmutableMap.of(users.name(), users)).build();
+        DataGeneratorSchema.builder().tables(ImmutableMap.of(users.getName(), users)).build();
 
     PCollectionView<DataGeneratorSchema> schemaView = mock(PCollectionView.class);
     ProcessContext c = mock(ProcessContext.class);
@@ -420,7 +420,7 @@ public class BatchAndWriteFnTest {
         .insertQps(1)
         .updateQps(0)
         .deleteQps(0)
-        .isRoot(true)
+        .setRoot(true)
         .recordsPerTick(1.0)
         .build();
   }
@@ -429,10 +429,10 @@ public class BatchAndWriteFnTest {
     return DataGeneratorColumn.builder()
         .name(name)
         .logicalType(LogicalType.INT64)
-        .isPrimaryKey(false)
-        .isNullable(false)
-        .isSkipped(false)
-        .isGenerated(false)
+        .setPrimaryKey(false)
+        .setNullable(false)
+        .setSkipped(false)
+        .setGenerated(false)
         .size(null)
         .precision(null)
         .scale(null)

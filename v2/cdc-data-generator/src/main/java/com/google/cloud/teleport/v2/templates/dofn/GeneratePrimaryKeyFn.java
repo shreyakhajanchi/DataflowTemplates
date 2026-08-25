@@ -102,21 +102,21 @@ public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Ro
       @Element DataGeneratorTable table, OutputReceiver<KV<String, Row>> out) {
     List<DataGeneratorColumn> pkColumns = primaryKeyColumns(table);
 
-    Schema schema = schemaCache.computeIfAbsent(table.name(), k -> buildSchema(pkColumns));
+    Schema schema = schemaCache.computeIfAbsent(table.getName(), k -> buildSchema(pkColumns));
     Row.Builder rowBuilder = Row.withSchema(schema);
 
     for (DataGeneratorColumn column : pkColumns) {
       rowBuilder.addValue(
-          DataGeneratorUtils.generateValue(table.name(), column, faker, customGenerator));
+          DataGeneratorUtils.generateValue(table.getName(), column, faker, customGenerator));
     }
     rowBuilder.addValue(pickShardId());
 
     try {
-      out.output(KV.of(table.name(), rowBuilder.build()));
+      out.output(KV.of(table.getName(), rowBuilder.build()));
     } catch (IllegalArgumentException | ClassCastException e) {
       throw new RuntimeException(
           "Failed to assemble root primary key for table '"
-              + table.name()
+              + table.getName()
               + "'. (If using a CustomDataGenerator, check its return types). Expected schema: "
               + schema,
           e);
@@ -126,14 +126,14 @@ public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Ro
   /** Resolve the PK column list for a table. */
   @VisibleForTesting
   public static List<DataGeneratorColumn> primaryKeyColumns(DataGeneratorTable table) {
-    if (table.primaryKeys() == null || table.primaryKeys().isEmpty()) {
+    if (table.getPrimaryKeys() == null || table.getPrimaryKeys().isEmpty()) {
       return ImmutableList.of();
     }
     ImmutableMap<String, DataGeneratorColumn> byName =
-        table.columns().stream()
-            .collect(ImmutableMap.toImmutableMap(DataGeneratorColumn::name, col -> col));
+        table.getColumns().stream()
+            .collect(ImmutableMap.toImmutableMap(DataGeneratorColumn::getName, col -> col));
 
-    return table.primaryKeys().stream()
+    return table.getPrimaryKeys().stream()
         .filter(byName::containsKey)
         .map(byName::get)
         .collect(Collectors.toList());
@@ -142,7 +142,7 @@ public class GeneratePrimaryKeyFn extends DoFn<DataGeneratorTable, KV<String, Ro
   private Schema buildSchema(List<DataGeneratorColumn> columns) {
     Schema.Builder builder = Schema.builder();
     for (DataGeneratorColumn col : columns) {
-      builder.addField(Schema.Field.of(col.name(), DataGeneratorUtils.mapToBeamFieldType(col)));
+      builder.addField(Schema.Field.of(col.getName(), DataGeneratorUtils.mapToBeamFieldType(col)));
     }
     builder.addField(Schema.Field.of(Constants.SHARD_ID_COLUMN_NAME, Schema.FieldType.STRING));
     return builder.build();

@@ -42,16 +42,16 @@ public class GeneratePrimaryKeyFnTest {
         DataGeneratorColumn.builder()
             .name("id")
             .logicalType(LogicalType.INT64)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
 
     DataGeneratorColumn col2 =
         DataGeneratorColumn.builder()
             .name("name")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
 
     DataGeneratorTable table =
@@ -64,12 +64,12 @@ public class GeneratePrimaryKeyFnTest {
             .insertQps(1)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(true)
+            .setRoot(true)
             .recordsPerTick(1.0)
             .build();
 
     assertEquals(1, GeneratePrimaryKeyFn.primaryKeyColumns(table).size());
-    assertEquals("id", GeneratePrimaryKeyFn.primaryKeyColumns(table).get(0).name());
+    assertEquals("id", GeneratePrimaryKeyFn.primaryKeyColumns(table).get(0).getName());
   }
 
   @Test
@@ -78,8 +78,8 @@ public class GeneratePrimaryKeyFnTest {
         DataGeneratorColumn.builder()
             .name("id")
             .logicalType(LogicalType.INT64)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
 
     DataGeneratorTable table =
@@ -92,7 +92,7 @@ public class GeneratePrimaryKeyFnTest {
             .insertQps(1)
             .updateQps(0)
             .deleteQps(0)
-            .isRoot(true)
+            .setRoot(true)
             .recordsPerTick(1.0)
             .build();
 
