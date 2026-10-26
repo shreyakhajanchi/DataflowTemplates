@@ -17,11 +17,14 @@ package com.google.cloud.teleport.v2.templates.model;
 
 import com.google.cloud.spanner.Dialect;
 import java.util.Objects;
+import org.apache.beam.sdk.schemas.JavaFieldSchema;
+import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 
 /**
  * Configuration for a Cloud Spanner sink, representing both the parsed JSON config file and the
  * pre-fetched dialect.
  */
+@DefaultSchema(JavaFieldSchema.class)
 public class SpannerSinkConfig implements SinkConfig {
 
   private String projectId;

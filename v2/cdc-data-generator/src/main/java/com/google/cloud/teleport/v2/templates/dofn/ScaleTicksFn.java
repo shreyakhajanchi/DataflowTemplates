@@ -71,9 +71,9 @@ public class ScaleTicksFn extends DoFn<Instant, Long> {
   @VisibleForTesting
   public static int totalRootQps(DataGeneratorSchema schema) {
     int total = 0;
-    for (DataGeneratorTable table : schema.tables().values()) {
-      if (table.isRoot()) {
-        total += table.insertQps();
+    for (DataGeneratorTable table : schema.getTables().values()) {
+      if (table.getRoot()) {
+        total += table.getInsertQps();
       }
     }
     return total;

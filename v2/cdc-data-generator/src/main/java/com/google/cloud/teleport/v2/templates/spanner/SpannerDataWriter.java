@@ -125,7 +125,7 @@ public class SpannerDataWriter implements DataWriter {
       LOG.error(
           "Failed to write {} mutations to Spanner table {} (operation={})",
           mutations.size(),
-          table.name(),
+          table.getName(),
           operation,
           e);
       throw e;
@@ -166,40 +166,40 @@ public class SpannerDataWriter implements DataWriter {
     // writeAtLeastOnce do not fail when the row already exists (for INSERT) or no
     // longer exists
     // (for UPDATE). DELETE is handled above.
-    Mutation.WriteBuilder builder = Mutation.newInsertOrUpdateBuilder(table.name());
-    for (DataGeneratorColumn col : table.columns()) {
+    Mutation.WriteBuilder builder = Mutation.newInsertOrUpdateBuilder(table.getName());
+    for (DataGeneratorColumn col : table.getColumns()) {
       if (col.isSkipped() || col.isGenerated()) {
         continue;
       }
-      Object val = fetchFromRow(row, col.name());
+      Object val = fetchFromRow(row, col.getName());
       setColumnValue(builder, col, val);
     }
     return builder.build();
   }
 
   private Mutation rowToDeleteMutation(DataGeneratorTable table, Row row) {
-    List<String> pks = table.primaryKeys();
+    List<String> pks = table.getPrimaryKeys();
     Key.Builder keyBuilder = Key.newBuilder();
     for (String pkName : pks) {
       Object val = fetchFromRow(row, pkName);
       if (val == null) {
         throw new IllegalStateException(
-            "Primary key value missing for column '" + pkName + "' in table " + table.name());
+            "Primary key value missing for column '" + pkName + "' in table " + table.getName());
       }
       DataGeneratorColumn col = findColumn(table, pkName);
-      appendToKey(keyBuilder, col.logicalType(), val);
+      appendToKey(keyBuilder, col.getLogicalType(), val);
     }
-    return Mutation.delete(table.name(), keyBuilder.build());
+    return Mutation.delete(table.getName(), keyBuilder.build());
   }
 
   private static DataGeneratorColumn findColumn(DataGeneratorTable table, String name) {
-    for (DataGeneratorColumn col : table.columns()) {
-      if (col.name().equals(name)) {
+    for (DataGeneratorColumn col : table.getColumns()) {
+      if (col.getName().equals(name)) {
         return col;
       }
     }
     throw new IllegalStateException(
-        "Primary key column '" + name + "' not found on table " + table.name());
+        "Primary key column '" + name + "' not found on table " + table.getName());
   }
 
   private static void appendToKey(Key.Builder builder, LogicalType type, Object value) {
@@ -237,8 +237,8 @@ public class SpannerDataWriter implements DataWriter {
 
   private void setColumnValue(
       Mutation.WriteBuilder builder, DataGeneratorColumn column, Object value) {
-    String name = column.name();
-    LogicalType type = column.logicalType();
+    String name = column.getName();
+    LogicalType type = column.getLogicalType();
     if (value == null) {
       // Emit an explicit typed null so Spanner doesn't complain about missing
       // non-null columns

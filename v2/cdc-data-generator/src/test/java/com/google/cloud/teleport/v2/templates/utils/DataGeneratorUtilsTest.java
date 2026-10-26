@@ -69,8 +69,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
     assertEquals(FieldType.STRING, DataGeneratorUtils.mapToBeamFieldType(col));
   }
@@ -84,8 +84,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c1")
             .logicalType(LogicalType.NUMERIC)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .precision(5)
             .scale(2)
             .build();
@@ -97,8 +97,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c2")
             .logicalType(LogicalType.NUMERIC)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .scale(2)
             .build();
     BigDecimal val2 = DataGeneratorUtils.generateNumeric(col2, faker);
@@ -109,8 +109,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c3")
             .logicalType(LogicalType.NUMERIC)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .precision(10)
             .build();
     BigDecimal val3 = DataGeneratorUtils.generateNumeric(col3, faker);
@@ -121,8 +121,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c4")
             .logicalType(LogicalType.NUMERIC)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .precision(5)
             .scale(7)
             .build();
@@ -139,8 +139,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
     Object strVal = DataGeneratorUtils.generateValue("default_table", strCol, faker, null);
     assertTrue(strVal instanceof String);
@@ -150,8 +150,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c")
             .logicalType(LogicalType.JSON)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
     Object jsonVal = DataGeneratorUtils.generateValue("default_table", jsonCol, faker, null);
     assertTrue(jsonVal instanceof String);
@@ -162,8 +162,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c")
             .logicalType(LogicalType.UUID)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
     Object uuidVal = DataGeneratorUtils.generateValue("default_table", uuidCol, faker, null);
     assertTrue(uuidVal instanceof String);
@@ -173,8 +173,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c")
             .logicalType(LogicalType.INT64)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
     Object intVal = DataGeneratorUtils.generateValue("default_table", intCol, faker, null);
     assertTrue(intVal instanceof Long);
@@ -184,8 +184,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c")
             .logicalType(LogicalType.FLOAT64)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
     Object floatVal = DataGeneratorUtils.generateValue("default_table", floatCol, faker, null);
     assertTrue(floatVal instanceof Double);
@@ -195,8 +195,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c")
             .logicalType(LogicalType.NUMERIC)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
     Object numVal = DataGeneratorUtils.generateValue("default_table", numCol, faker, null);
     assertTrue(numVal instanceof BigDecimal);
@@ -206,8 +206,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c")
             .logicalType(LogicalType.BOOLEAN)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
     Object boolVal = DataGeneratorUtils.generateValue("default_table", boolCol, faker, null);
     assertTrue(boolVal instanceof Boolean);
@@ -217,8 +217,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c")
             .logicalType(LogicalType.BYTES)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
     Object bytesVal = DataGeneratorUtils.generateValue("default_table", bytesCol, faker, null);
     assertTrue(bytesVal instanceof byte[]);
@@ -228,8 +228,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c")
             .logicalType(LogicalType.DATE)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
     Object dateVal = DataGeneratorUtils.generateValue("default_table", dateCol, faker, null);
     assertTrue(dateVal instanceof Instant);
@@ -239,8 +239,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c")
             .logicalType(LogicalType.TIMESTAMP)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
     Object tsVal = DataGeneratorUtils.generateValue("default_table", tsCol, faker, null);
     assertTrue(tsVal instanceof Instant);
@@ -253,8 +253,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("col")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .fakerExpression("fixed_value")
             .build();
     Assert.assertEquals(
@@ -374,8 +374,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("nested_json")
             .logicalType(LogicalType.JSON)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .fakerExpression(schemaMap)
             .build();
 
@@ -399,8 +399,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("col")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .fakerExpression("#{invalid}")
             .build();
     Assert.assertThrows(
@@ -472,8 +472,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .fakerExpression(testMap)
             .build();
     Assert.assertThrows(
@@ -491,8 +491,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("json_list")
             .logicalType(LogicalType.JSON)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .fakerExpression(schemaMap)
             .build();
 
@@ -510,8 +510,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c1")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
 
     CustomDataGenerator mockGenerator =
@@ -532,8 +532,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c1")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .fakerExpression("fallback_value")
             .build();
 
@@ -555,8 +555,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c1")
             .logicalType(LogicalType.STRING)
-            .isNullable(true)
-            .isGenerated(false)
+            .setNullable(true)
+            .setGenerated(false)
             .fakerExpression("fallback_value")
             .build();
 
@@ -578,8 +578,8 @@ public class DataGeneratorUtilsTest {
         DataGeneratorColumn.builder()
             .name("c1")
             .logicalType(LogicalType.STRING)
-            .isNullable(false)
-            .isGenerated(false)
+            .setNullable(false)
+            .setGenerated(false)
             .build();
 
     CustomDataGenerator throwingGenerator =

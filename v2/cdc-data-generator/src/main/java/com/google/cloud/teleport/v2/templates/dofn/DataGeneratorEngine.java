@@ -161,7 +161,7 @@ public class DataGeneratorEngine {
 
     this.schema = loadedSchema;
 
-    DataGeneratorTable table = schema.tables().get(tableName);
+    DataGeneratorTable table = schema.getTables().get(tableName);
 
     if (table == null) {
       Metrics.counter(DataGeneratorEngine.class, "tableNotFound_" + tableName).inc();
@@ -257,7 +257,7 @@ public class DataGeneratorEngine {
       MutationBatcher batcher,
       List<String> insertTopoOrder) {
 
-    String tableName = table.name();
+    String tableName = table.getName();
     tableMapState.put(tableName, table);
 
     // 1. Complete Row & Buffer Insert Mutation
@@ -296,9 +296,9 @@ public class DataGeneratorEngine {
     long delInterval = this.deleteInterval;
 
     if (!pkMap.isEmpty()) {
-      int tableInsertQps = table.insertQps();
-      int tableUpdateQps = table.updateQps();
-      int tableDeleteQps = table.deleteQps();
+      int tableInsertQps = table.getInsertQps();
+      int tableUpdateQps = table.getUpdateQps();
+      int tableDeleteQps = table.getDeleteQps();
 
       numUpdates = calculateNumUpdates(tableInsertQps, tableUpdateQps);
       double deleteRatio = tableInsertQps > 0 ? (double) tableDeleteQps / tableInsertQps : 0.0;
@@ -338,9 +338,9 @@ public class DataGeneratorEngine {
             ? Math.min(earliestAncestorDelete, deleteTimestamp)
             : earliestAncestorDelete;
 
-    if (table.childTables() != null) {
-      for (String childTableName : table.childTables()) {
-        DataGeneratorTable childTable = schema.tables().get(childTableName);
+    if (table.getChildTables() != null) {
+      for (String childTableName : table.getChildTables()) {
+        DataGeneratorTable childTable = schema.getTables().get(childTableName);
         if (childTable == null) {
           Metrics.counter(DataGeneratorEngine.class, "childTableNotFound_" + childTableName).inc();
           continue;
@@ -400,7 +400,7 @@ public class DataGeneratorEngine {
       MutationBatcher batcher,
       List<String> insertTopoOrder) {
 
-    int numChildren = calculateNumChildren(parentTable.insertQps(), childTable.insertQps());
+    int numChildren = calculateNumChildren(parentTable.getInsertQps(), childTable.getInsertQps());
 
     for (int i = 0; i < numChildren; i++) {
       Row childRow = generateChildRow(parentRow, childTable, ancestorRows);
@@ -410,13 +410,13 @@ public class DataGeneratorEngine {
             .getFailedRecords()
             .add(
                 FailureRecord.toJson(
-                    childTable.name(),
+                    childTable.getName(),
                     FailureRecord.OPERATION_GENERATION,
                     null,
                     new IllegalArgumentException(
                         String.format(
                             "Cannot resolve structural dependency (FK/Interleave) for table: %s",
-                            childTable.name()))));
+                            childTable.getName()))));
         break;
       }
       generateAndBufferInsertWithLifecycle(
@@ -443,51 +443,51 @@ public class DataGeneratorEngine {
 
     Map<String, Object> columnValues = new HashMap<>();
 
-    if (childTable.foreignKeys() != null && !childTable.foreignKeys().isEmpty()) {
-      for (DataGeneratorForeignKey fk : childTable.foreignKeys()) {
-        Row source = ancestorRows.get(fk.referencedTable());
+    if (childTable.getForeignKeys() != null && !childTable.getForeignKeys().isEmpty()) {
+      for (DataGeneratorForeignKey fk : childTable.getForeignKeys()) {
+        Row source = ancestorRows.get(fk.getReferencedTable());
         if (source == null) {
           LOG.warn(
               "Cannot resolve FK {} from {} -> {}: target table is not in the ancestor chain.",
-              fk.name(),
-              childTable.name(),
-              fk.referencedTable());
+              fk.getName(),
+              childTable.getName(),
+              fk.getReferencedTable());
           return null;
         }
-        for (int i = 0; i < fk.keyColumns().size(); i++) {
-          String refCol = fk.referencedColumns().get(i);
+        for (int i = 0; i < fk.getKeyColumns().size(); i++) {
+          String refCol = fk.getReferencedColumns().get(i);
           if (!source.getSchema().hasField(refCol)) {
             LOG.warn(
                 "Foreign key constraint '{}' references missing column '{}' on table '{}'.",
-                fk.name(),
+                fk.getName(),
                 refCol,
-                fk.referencedTable());
+                fk.getReferencedTable());
             return null;
           }
-          columnValues.put(fk.keyColumns().get(i), source.getValue(refCol));
+          columnValues.put(fk.getKeyColumns().get(i), source.getValue(refCol));
         }
       }
     }
 
-    if (childTable.interleavedInTable() != null) {
-      String interleavedParentName = childTable.interleavedInTable();
+    if (childTable.getInterleavedInTable() != null) {
+      String interleavedParentName = childTable.getInterleavedInTable();
       Row interleavedParentRow = ancestorRows.get(interleavedParentName);
       DataGeneratorTable interleavedParentTable =
-          schema != null && schema.tables() != null
-              ? schema.tables().get(interleavedParentName)
+          schema != null && schema.getTables() != null
+              ? schema.getTables().get(interleavedParentName)
               : null;
       if (interleavedParentRow == null || interleavedParentTable == null) {
         LOG.warn(
             "Cannot resolve interleaved parent table '{}' for child '{}': parent is not in the ancestor chain or schema.",
             interleavedParentName,
-            childTable.name());
+            childTable.getName());
         return null;
       }
-      for (String pk : interleavedParentTable.primaryKeys()) {
+      for (String pk : interleavedParentTable.getPrimaryKeys()) {
         if (!interleavedParentRow.getSchema().hasField(pk)) {
           LOG.warn(
               "Interleaved child table '{}' references missing primary key column '{}' on parent '{}'.",
-              childTable.name(),
+              childTable.getName(),
               pk,
               interleavedParentName);
           return null;
@@ -502,18 +502,19 @@ public class DataGeneratorEngine {
     Schema.Builder schemaBuilder = Schema.builder();
     List<Object> values = new ArrayList<>();
 
-    for (DataGeneratorColumn col : childTable.columns()) {
+    for (DataGeneratorColumn col : childTable.getColumns()) {
       if (col.isSkipped()) {
         continue;
       }
       Object val;
-      if (columnValues.containsKey(col.name())) {
-        val = columnValues.get(col.name());
+      if (columnValues.containsKey(col.getName())) {
+        val = columnValues.get(col.getName());
       } else {
-        val = DataGeneratorUtils.generateValue(childTable.name(), col, faker, customGenerator);
+        val = DataGeneratorUtils.generateValue(childTable.getName(), col, faker, customGenerator);
       }
       schemaBuilder.addField(
-          Schema.Field.of(col.name(), DataGeneratorUtils.mapToBeamFieldType(col.logicalType())));
+          Schema.Field.of(
+              col.getName(), DataGeneratorUtils.mapToBeamFieldType(col.getLogicalType())));
       values.add(val);
     }
 
@@ -529,7 +530,7 @@ public class DataGeneratorEngine {
     } catch (IllegalArgumentException | ClassCastException e) {
       throw new RuntimeException(
           "Failed to assemble INSERT event for child table '"
-              + childTable.name()
+              + childTable.getName()
               + "'. (If using a CustomDataGenerator, check its return types). Expected schema: "
               + schemaBuilder.build()
               + ", Values: "

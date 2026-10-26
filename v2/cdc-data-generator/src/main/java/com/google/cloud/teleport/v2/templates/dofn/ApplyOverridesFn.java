@@ -60,14 +60,15 @@ public class ApplyOverridesFn extends DoFn<DataGeneratorSchema, DataGeneratorSch
 
     // Warn about unknown tables specified in the config override
     configTables.keySet().stream()
-        .filter(tableName -> !schema.tables().containsKey(tableName))
+        .filter(tableName -> !schema.getTables().containsKey(tableName))
         .forEach(tableName -> LOG.warn("Override specified for unknown table: {}", tableName));
 
     ImmutableMap.Builder<String, DataGeneratorTable> updatedTables = ImmutableMap.builder();
-    for (DataGeneratorTable table : schema.tables().values()) {
-      DataGeneratorTable updatedTable = applyTableOverrides(table, configTables.get(table.name()));
+    for (DataGeneratorTable table : schema.getTables().values()) {
+      DataGeneratorTable updatedTable =
+          applyTableOverrides(table, configTables.get(table.getName()));
       if (hasValidPrimaryKey(updatedTable)) {
-        updatedTables.put(table.name(), updatedTable);
+        updatedTables.put(table.getName(), updatedTable);
       }
     }
 
@@ -75,21 +76,24 @@ public class ApplyOverridesFn extends DoFn<DataGeneratorSchema, DataGeneratorSch
   }
 
   private boolean hasValidPrimaryKey(DataGeneratorTable table) {
-    if (table.primaryKeys() == null || table.primaryKeys().isEmpty()) {
-      LOG.error("Table {} has no primary-key columns defined — skipping table.", table.name());
+    if (table.getPrimaryKeys() == null || table.getPrimaryKeys().isEmpty()) {
+      LOG.error("Table {} has no primary-key columns defined — skipping table.", table.getName());
       return false;
     }
     Map<String, DataGeneratorColumn> byName =
-        table.columns().stream().collect(Collectors.toMap(DataGeneratorColumn::name, col -> col));
+        table.getColumns().stream()
+            .collect(Collectors.toMap(DataGeneratorColumn::getName, col -> col));
 
-    for (String pkName : table.primaryKeys()) {
+    for (String pkName : table.getPrimaryKeys()) {
       if (!byName.containsKey(pkName)) {
         LOG.error(
             "Table {} has declared primary key columns {} but some are missing from the column list"
                 + " {} — skipping table.",
-            table.name(),
-            table.primaryKeys(),
-            table.columns().stream().map(DataGeneratorColumn::name).collect(Collectors.toList()));
+            table.getName(),
+            table.getPrimaryKeys(),
+            table.getColumns().stream()
+                .map(DataGeneratorColumn::getName)
+                .collect(Collectors.toList()));
         return false;
       }
     }
@@ -131,12 +135,12 @@ public class ApplyOverridesFn extends DoFn<DataGeneratorSchema, DataGeneratorSch
   private ImmutableList<DataGeneratorColumn> applyColumnOverrides(
       DataGeneratorTable existingTable, Map<String, SchemaConfig.ColumnConfig> columnsConfig) {
     List<DataGeneratorColumn> updatedColumns = new ArrayList<>();
-    for (DataGeneratorColumn col : existingTable.columns()) {
-      if (!columnsConfig.containsKey(col.name())) {
+    for (DataGeneratorColumn col : existingTable.getColumns()) {
+      if (!columnsConfig.containsKey(col.getName())) {
         updatedColumns.add(col);
         continue;
       }
-      SchemaConfig.ColumnConfig colConfig = columnsConfig.get(col.name());
+      SchemaConfig.ColumnConfig colConfig = columnsConfig.get(col.getName());
       DataGeneratorColumn.Builder colBuilder = col.toBuilder();
 
       if (colConfig.getFakerExpression() != null) {
@@ -147,12 +151,12 @@ public class ApplyOverridesFn extends DoFn<DataGeneratorSchema, DataGeneratorSch
         if (skip && col.isPrimaryKey()) {
           throw new IllegalArgumentException(
               "Cannot skip primary-key column '"
-                  + col.name()
+                  + col.getName()
                   + "' in table '"
-                  + existingTable.name()
+                  + existingTable.getName()
                   + "': PK values are required for state-keying and lifecycle events.");
         }
-        colBuilder.isSkipped(skip);
+        colBuilder.setSkipped(skip);
       }
       updatedColumns.add(colBuilder.build());
     }
@@ -165,8 +169,8 @@ public class ApplyOverridesFn extends DoFn<DataGeneratorSchema, DataGeneratorSch
     // This guarantees that downstream DFS graph traversals remain
     // 100% deterministic and reproducible across cluster worker node restarts and unit tests.
     LinkedHashMap<String, DataGeneratorForeignKey> mergedFksByName = new LinkedHashMap<>();
-    for (DataGeneratorForeignKey fk : existingTable.foreignKeys()) {
-      mergedFksByName.put(fk.name(), fk);
+    for (DataGeneratorForeignKey fk : existingTable.getForeignKeys()) {
+      mergedFksByName.put(fk.getName(), fk);
     }
 
     for (SchemaConfig.ForeignKeyConfig fkConfig : fkConfigs) {
@@ -193,19 +197,19 @@ public class ApplyOverridesFn extends DoFn<DataGeneratorSchema, DataGeneratorSch
             "Foreign key '"
                 + fkName
                 + "' on table '"
-                + existingTable.name()
+                + existingTable.getName()
                 + "' conflicts with the discovered definition. discovered=[refTable="
-                + discoveredFk.referencedTable()
+                + discoveredFk.getReferencedTable()
                 + ", keyColumns="
-                + discoveredFk.keyColumns()
+                + discoveredFk.getKeyColumns()
                 + ", referencedColumns="
-                + discoveredFk.referencedColumns()
+                + discoveredFk.getReferencedColumns()
                 + "], config=[refTable="
-                + configuredFk.referencedTable()
+                + configuredFk.getReferencedTable()
                 + ", keyColumns="
-                + configuredFk.keyColumns()
+                + configuredFk.getKeyColumns()
                 + ", referencedColumns="
-                + configuredFk.referencedColumns()
+                + configuredFk.getReferencedColumns()
                 + "]. Align the config with the source schema or rename the FK.");
       }
       mergedFksByName.put(fkName, configuredFk);
@@ -214,8 +218,8 @@ public class ApplyOverridesFn extends DoFn<DataGeneratorSchema, DataGeneratorSch
   }
 
   private static boolean fkEquivalent(DataGeneratorForeignKey a, DataGeneratorForeignKey b) {
-    return a.referencedTable().equals(b.referencedTable())
-        && a.keyColumns().equals(b.keyColumns())
-        && a.referencedColumns().equals(b.referencedColumns());
+    return a.getReferencedTable().equals(b.getReferencedTable())
+        && a.getKeyColumns().equals(b.getKeyColumns())
+        && a.getReferencedColumns().equals(b.getReferencedColumns());
   }
 }

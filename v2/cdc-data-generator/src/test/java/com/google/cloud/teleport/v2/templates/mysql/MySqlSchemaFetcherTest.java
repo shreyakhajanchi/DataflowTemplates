@@ -104,8 +104,8 @@ public class MySqlSchemaFetcherTest {
     when(mockConnection.getCatalog()).thenReturn("testdb");
 
     DataGeneratorSchema schema = fetcher.getSchema();
-    assertThat(schema.tables()).hasSize(1);
-    assertThat(schema.tables()).containsKey("TableA");
+    assertThat(schema.getTables()).hasSize(1);
+    assertThat(schema.getTables()).containsKey("TableA");
   }
 
   @Test
@@ -168,18 +168,18 @@ public class MySqlSchemaFetcherTest {
     when(mockConnection.getCatalog()).thenReturn("testdb");
 
     DataGeneratorSchema schema = fetcher.getSchema();
-    assertThat(schema.tables()).hasSize(1);
-    DataGeneratorTable actualTable = schema.tables().get("TableA");
+    assertThat(schema.getTables()).hasSize(1);
+    DataGeneratorTable actualTable = schema.getTables().get("TableA");
     assertThat(actualTable).isNotNull();
-    assertThat(actualTable.name()).isEqualTo("TableA");
-    assertThat(actualTable.columns()).hasSize(2);
-    assertThat(actualTable.columns().stream().map(DataGeneratorColumn::name))
+    assertThat(actualTable.getName()).isEqualTo("TableA");
+    assertThat(actualTable.getColumns()).hasSize(2);
+    assertThat(actualTable.getColumns().stream().map(DataGeneratorColumn::getName))
         .containsExactly("Id", "Name");
-    assertThat(actualTable.primaryKeys()).containsExactly("Id");
-    assertThat(actualTable.foreignKeys()).hasSize(1);
-    assertThat(actualTable.foreignKeys().get(0).name()).isEqualTo("fk_test");
-    assertThat(actualTable.uniqueKeys()).hasSize(1);
-    assertThat(actualTable.uniqueKeys().get(0).name()).isEqualTo("idx_unique");
+    assertThat(actualTable.getPrimaryKeys()).containsExactly("Id");
+    assertThat(actualTable.getForeignKeys()).hasSize(1);
+    assertThat(actualTable.getForeignKeys().get(0).getName()).isEqualTo("fk_test");
+    assertThat(actualTable.getUniqueKeys()).hasSize(1);
+    assertThat(actualTable.getUniqueKeys().get(0).getName()).isEqualTo("idx_unique");
   }
 
   @Test
@@ -227,9 +227,9 @@ public class MySqlSchemaFetcherTest {
     when(mockConnection.getCatalog()).thenReturn("testdb");
 
     DataGeneratorSchema schema = fetcher.getSchema();
-    assertThat(schema.tables()).hasSize(1);
-    DataGeneratorTable actualTable = schema.tables().get("TableA");
-    assertThat(actualTable.foreignKeys()).isEmpty();
-    assertThat(actualTable.uniqueKeys()).isEmpty();
+    assertThat(schema.getTables()).hasSize(1);
+    DataGeneratorTable actualTable = schema.getTables().get("TableA");
+    assertThat(actualTable.getForeignKeys()).isEmpty();
+    assertThat(actualTable.getUniqueKeys()).isEmpty();
   }
 }

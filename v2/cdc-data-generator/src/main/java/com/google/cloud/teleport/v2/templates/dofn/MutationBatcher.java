@@ -129,7 +129,7 @@ public class MutationBatcher {
       return;
     }
     for (BufferKey bufferKey : new ArrayList<>(buffers.keySet())) {
-      if (MUTATION_UPDATE.equals(bufferKey.operation())) {
+      if (MUTATION_UPDATE.equals(bufferKey.getOperation())) {
         flush(bufferKey);
       }
     }
@@ -137,16 +137,16 @@ public class MutationBatcher {
 
   private void flushByTableAndOp(String tableName, String op) {
     for (BufferKey bufferKey : new ArrayList<>(buffers.keySet())) {
-      if (bufferKey.tableName().equals(tableName) && bufferKey.operation().equals(op)) {
+      if (bufferKey.getTableName().equals(tableName) && bufferKey.getOperation().equals(op)) {
         flush(bufferKey);
       }
     }
   }
 
   private void flush(BufferKey key) {
-    String tableName = key.tableName();
-    String shardId = key.shardId();
-    String operation = key.operation();
+    String tableName = key.getTableName();
+    String shardId = key.getShardId();
+    String operation = key.getOperation();
 
     BufferValue bv = buffers.get(key);
     List<Row> batch = bv != null ? bv.rows : null;

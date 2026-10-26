@@ -52,10 +52,10 @@ public class ApplyOverridesFnTest {
                 DataGeneratorColumn.builder()
                     .name("id")
                     .logicalType(LogicalType.INT64)
-                    .isNullable(false)
-                    .isPrimaryKey(true)
-                    .isSkipped(false)
-                    .isGenerated(false)
+                    .setNullable(false)
+                    .setPrimaryKey(true)
+                    .setSkipped(false)
+                    .setGenerated(false)
                     .build()))
         .primaryKeys(ImmutableList.of("id"))
         .foreignKeys(ImmutableList.of())
@@ -78,11 +78,11 @@ public class ApplyOverridesFnTest {
     verify(receiver).output(captor.capture());
     DataGeneratorSchema resolvedSchema = captor.getValue();
     assertNotNull(resolvedSchema);
-    DataGeneratorTable table = resolvedSchema.tables().get("table1");
+    DataGeneratorTable table = resolvedSchema.getTables().get("table1");
     assertNotNull(table);
-    assertEquals(100L, (long) table.insertQps());
-    assertEquals(10L, (long) table.updateQps());
-    assertEquals(1L, (long) table.deleteQps());
+    assertEquals(100L, (long) table.getInsertQps());
+    assertEquals(10L, (long) table.getUpdateQps());
+    assertEquals(1L, (long) table.getDeleteQps());
   }
 
   @Test
@@ -102,9 +102,9 @@ public class ApplyOverridesFnTest {
     verify(receiver).output(captor.capture());
     DataGeneratorSchema resolvedSchema = captor.getValue();
     assertNotNull(resolvedSchema);
-    DataGeneratorTable table = resolvedSchema.tables().get("table1");
+    DataGeneratorTable table = resolvedSchema.getTables().get("table1");
     assertNotNull(table);
-    assertEquals(100L, (long) table.insertQps());
+    assertEquals(100L, (long) table.getInsertQps());
   }
 
   @Test
@@ -125,10 +125,10 @@ public class ApplyOverridesFnTest {
 
     verify(receiver).output(captor.capture());
     DataGeneratorSchema resolvedSchema = captor.getValue();
-    DataGeneratorTable table = resolvedSchema.tables().get("table1");
-    assertEquals(500L, (long) table.insertQps());
-    assertEquals(10L, (long) table.updateQps());
-    assertEquals(1L, (long) table.deleteQps());
+    DataGeneratorTable table = resolvedSchema.getTables().get("table1");
+    assertEquals(500L, (long) table.getInsertQps());
+    assertEquals(10L, (long) table.getUpdateQps());
+    assertEquals(1L, (long) table.getDeleteQps());
   }
 
   @Test
@@ -137,17 +137,17 @@ public class ApplyOverridesFnTest {
         DataGeneratorColumn.builder()
             .name("email")
             .logicalType(LogicalType.STRING)
-            .isNullable(true)
-            .isPrimaryKey(false)
-            .isGenerated(false)
+            .setNullable(true)
+            .setPrimaryKey(false)
+            .setGenerated(false)
             .build();
     DataGeneratorColumn pkCol =
         DataGeneratorColumn.builder()
             .name("id")
             .logicalType(LogicalType.INT64)
-            .isNullable(false)
-            .isPrimaryKey(true)
-            .isGenerated(false)
+            .setNullable(false)
+            .setPrimaryKey(true)
+            .setGenerated(false)
             .build();
     DataGeneratorSchema schema =
         DataGeneratorSchema.builder()
@@ -175,9 +175,9 @@ public class ApplyOverridesFnTest {
 
     verify(receiver).output(captor.capture());
     DataGeneratorSchema resolvedSchema = captor.getValue();
-    DataGeneratorTable table = resolvedSchema.tables().get("table1");
-    DataGeneratorColumn updatedCol = table.columns().get(0);
-    assertEquals("#{internet.emailAddress}", updatedCol.fakerExpression());
+    DataGeneratorTable table = resolvedSchema.getTables().get("table1");
+    DataGeneratorColumn updatedCol = table.getColumns().get(0);
+    assertEquals("#{internet.emailAddress}", updatedCol.getFakerExpression());
     assertTrue(updatedCol.isSkipped());
   }
 
@@ -187,9 +187,9 @@ public class ApplyOverridesFnTest {
         DataGeneratorColumn.builder()
             .name("id")
             .logicalType(LogicalType.INT64)
-            .isNullable(false)
-            .isPrimaryKey(true)
-            .isGenerated(false)
+            .setNullable(false)
+            .setPrimaryKey(true)
+            .setGenerated(false)
             .build();
     DataGeneratorSchema schema =
         DataGeneratorSchema.builder()
@@ -237,13 +237,13 @@ public class ApplyOverridesFnTest {
 
     verify(receiver).output(captor.capture());
     DataGeneratorSchema resolvedSchema = captor.getValue();
-    DataGeneratorTable table = resolvedSchema.tables().get("table1");
-    assertEquals(1, table.foreignKeys().size());
-    DataGeneratorForeignKey fk = table.foreignKeys().get(0);
-    assertEquals("fk1", fk.name());
-    assertEquals("table2", fk.referencedTable());
-    assertEquals(Arrays.asList("col1"), fk.keyColumns());
-    assertEquals(Arrays.asList("col2"), fk.referencedColumns());
+    DataGeneratorTable table = resolvedSchema.getTables().get("table1");
+    assertEquals(1, table.getForeignKeys().size());
+    DataGeneratorForeignKey fk = table.getForeignKeys().get(0);
+    assertEquals("fk1", fk.getName());
+    assertEquals("table2", fk.getReferencedTable());
+    assertEquals(Arrays.asList("col1"), fk.getKeyColumns());
+    assertEquals(Arrays.asList("col2"), fk.getReferencedColumns());
   }
 
   @Test
@@ -308,8 +308,8 @@ public class ApplyOverridesFnTest {
 
     verify(receiver).output(captor.capture());
     DataGeneratorSchema resolvedSchema = captor.getValue();
-    DataGeneratorTable table = resolvedSchema.tables().get("table1");
-    assertEquals(1, table.foreignKeys().size());
+    DataGeneratorTable table = resolvedSchema.getTables().get("table1");
+    assertEquals(1, table.getForeignKeys().size());
   }
 
   @Test
@@ -327,7 +327,7 @@ public class ApplyOverridesFnTest {
 
     verify(receiver).output(captor.capture());
     DataGeneratorSchema resolvedSchema = captor.getValue();
-    assertTrue(resolvedSchema.tables().isEmpty());
+    assertTrue(resolvedSchema.getTables().isEmpty());
   }
 
   @Test
@@ -348,10 +348,10 @@ public class ApplyOverridesFnTest {
 
     verify(receiver).output(captor.capture());
     DataGeneratorSchema resolvedSchema = captor.getValue();
-    DataGeneratorTable table = resolvedSchema.tables().get("table1");
-    assertEquals(100L, (long) table.insertQps());
-    assertEquals(20L, (long) table.updateQps());
-    assertEquals(5L, (long) table.deleteQps());
+    DataGeneratorTable table = resolvedSchema.getTables().get("table1");
+    assertEquals(100L, (long) table.getInsertQps());
+    assertEquals(20L, (long) table.getUpdateQps());
+    assertEquals(5L, (long) table.getDeleteQps());
   }
 
   @Test
@@ -360,9 +360,9 @@ public class ApplyOverridesFnTest {
         DataGeneratorColumn.builder()
             .name("id")
             .logicalType(LogicalType.INT64)
-            .isNullable(false)
-            .isPrimaryKey(true)
-            .isGenerated(false)
+            .setNullable(false)
+            .setPrimaryKey(true)
+            .setGenerated(false)
             .build();
     DataGeneratorSchema schema =
         DataGeneratorSchema.builder()
@@ -390,8 +390,8 @@ public class ApplyOverridesFnTest {
 
     verify(receiver).output(captor.capture());
     DataGeneratorSchema resolvedSchema = captor.getValue();
-    DataGeneratorTable table = resolvedSchema.tables().get("table1");
-    DataGeneratorColumn updatedCol = table.columns().get(0);
+    DataGeneratorTable table = resolvedSchema.getTables().get("table1");
+    DataGeneratorColumn updatedCol = table.getColumns().get(0);
     assertTrue(!updatedCol.isSkipped());
   }
 
@@ -426,9 +426,9 @@ public class ApplyOverridesFnTest {
                     DataGeneratorColumn.builder()
                         .name("col1")
                         .logicalType(LogicalType.STRING)
-                        .isNullable(true)
-                        .isPrimaryKey(false)
-                        .isGenerated(false)
+                        .setNullable(true)
+                        .setPrimaryKey(false)
+                        .setGenerated(false)
                         .build()))
             .primaryKeys(ImmutableList.of())
             .foreignKeys(ImmutableList.of())
@@ -444,9 +444,9 @@ public class ApplyOverridesFnTest {
                     DataGeneratorColumn.builder()
                         .name("id")
                         .logicalType(LogicalType.INT64)
-                        .isNullable(false)
-                        .isPrimaryKey(true)
-                        .isGenerated(false)
+                        .setNullable(false)
+                        .setPrimaryKey(true)
+                        .setGenerated(false)
                         .build()))
             .primaryKeys(ImmutableList.of("id", "type"))
             .foreignKeys(ImmutableList.of())
@@ -469,9 +469,9 @@ public class ApplyOverridesFnTest {
     assertNotNull(resolvedSchema);
 
     // Assert only table1 is in the resolved schema, while table2 and table3 are skipped
-    assertEquals(1, resolvedSchema.tables().size());
-    assertTrue(resolvedSchema.tables().containsKey("table1"));
-    assertTrue(!resolvedSchema.tables().containsKey("table2"));
-    assertTrue(!resolvedSchema.tables().containsKey("table3"));
+    assertEquals(1, resolvedSchema.getTables().size());
+    assertTrue(resolvedSchema.getTables().containsKey("table1"));
+    assertTrue(!resolvedSchema.getTables().containsKey("table2"));
+    assertTrue(!resolvedSchema.getTables().containsKey("table3"));
   }
 }

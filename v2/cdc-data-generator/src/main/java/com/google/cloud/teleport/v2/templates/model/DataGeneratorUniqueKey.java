@@ -16,18 +16,20 @@
 package com.google.cloud.teleport.v2.templates.model;
 
 import com.google.auto.value.AutoValue;
-import com.google.common.collect.ImmutableList;
-import java.io.Serializable;
+import java.util.List;
+import org.apache.beam.sdk.schemas.AutoValueSchema;
+import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 
 /** Represents a unique key/index in the data generator schema. */
 @AutoValue
-public abstract class DataGeneratorUniqueKey implements Serializable {
+@DefaultSchema(AutoValueSchema.class)
+public abstract class DataGeneratorUniqueKey {
 
   /** The name of the unique key/index. */
-  public abstract String name();
+  public abstract String getName();
 
   /** The columns that make up the unique key. */
-  public abstract ImmutableList<String> columns();
+  public abstract List<String> getColumns();
 
   public static Builder builder() {
     return new AutoValue_DataGeneratorUniqueKey.Builder();
@@ -37,7 +39,15 @@ public abstract class DataGeneratorUniqueKey implements Serializable {
   public abstract static class Builder {
     public abstract Builder name(String name);
 
-    public abstract Builder columns(ImmutableList<String> columns);
+    public Builder setName(String name) {
+      return name(name);
+    }
+
+    public abstract Builder columns(List<String> columns);
+
+    public Builder setColumns(List<String> columns) {
+      return columns(columns);
+    }
 
     public abstract DataGeneratorUniqueKey build();
   }

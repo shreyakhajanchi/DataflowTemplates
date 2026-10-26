@@ -160,7 +160,7 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
         .interleavedInTable(table.interleavingParent())
         .foreignKeys(fksBuilder.build())
         .uniqueKeys(uniqueKeysBuilder.build())
-        .isRoot(table.interleavingParent() == null)
+        .setRoot(table.interleavingParent() == null)
         .insertQps(0)
         .updateQps(0) // Default value
         .deleteQps(0) // Default value
@@ -203,9 +203,9 @@ public class SpannerSchemaFetcher implements SinkSchemaFetcher {
     return DataGeneratorColumn.builder()
         .name(column.name())
         .logicalType(logicalType)
-        .isNullable(!column.notNull())
-        .isGenerated(column.isGenerated())
-        .isPrimaryKey(primaryKeys.contains(column.name()))
+        .setNullable(!column.notNull())
+        .setGenerated(column.isGenerated())
+        .setPrimaryKey(primaryKeys.contains(column.name()))
         .size(size)
         .precision(precision)
         .scale(scale)

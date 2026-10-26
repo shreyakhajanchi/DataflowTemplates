@@ -33,7 +33,6 @@ import java.util.function.Consumer;
 import net.datafaker.Faker;
 import org.apache.beam.sdk.coders.ListCoder;
 import org.apache.beam.sdk.coders.SerializableCoder;
-import org.apache.beam.sdk.coders.StringUtf8Coder;
 import org.apache.beam.sdk.coders.VarLongCoder;
 import org.apache.beam.sdk.metrics.Metrics;
 import org.apache.beam.sdk.state.MapState;
@@ -86,16 +85,13 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
       StateSpecs.map(VarLongCoder.of(), ListCoder.of(SerializableCoder.of(LifecycleEvent.class)));
 
   @StateId("activeTimestamps")
-  private final StateSpec<ValueState<List<Long>>> activeTimestampsSpec =
-      StateSpecs.value(ListCoder.of(VarLongCoder.of()));
+  private final StateSpec<ValueState<List<Long>>> activeTimestampsSpec = StateSpecs.value();
 
   @StateId("tableMapState")
-  private final StateSpec<MapState<String, DataGeneratorTable>> tableMapSpec =
-      StateSpecs.map(StringUtf8Coder.of(), SerializableCoder.of(DataGeneratorTable.class));
+  private final StateSpec<MapState<String, DataGeneratorTable>> tableMapSpec = StateSpecs.map();
 
   @StateId("insertTopoOrderState")
-  private final StateSpec<ValueState<List<String>>> insertTopoOrderSpec =
-      StateSpecs.value(ListCoder.of(StringUtf8Coder.of()));
+  private final StateSpec<ValueState<List<String>>> insertTopoOrderSpec = StateSpecs.value();
 
   @TimerId("eventTimer")
   private final TimerSpec eventTimerSpec = TimerSpecs.timer(TimeDomain.PROCESSING_TIME);
@@ -156,7 +152,7 @@ public class BatchAndWriteFn extends DoFn<KV<Integer, GeneratedRecord>, String> 
     ensureSchemaInitialized(c, insertTopoOrderState);
 
     GeneratedRecord record = c.element().getValue();
-    String tableName = record.tableName();
+    String tableName = record.getTableName();
     Row pkValues = record.primaryKeyValues();
 
     try {

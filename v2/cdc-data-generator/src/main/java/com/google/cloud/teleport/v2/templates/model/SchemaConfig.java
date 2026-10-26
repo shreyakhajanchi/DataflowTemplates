@@ -15,14 +15,17 @@
  */
 package com.google.cloud.teleport.v2.templates.model;
 
-import java.io.Serializable;
 import java.util.List;
 import java.util.Map;
+import javax.annotation.Nullable;
+import org.apache.beam.sdk.schemas.JavaFieldSchema;
+import org.apache.beam.sdk.schemas.annotations.DefaultSchema;
 
 /** Configuration class for schema overrides, used for deserializing HOCON/JSON config files. */
-public class SchemaConfig implements Serializable {
+@DefaultSchema(JavaFieldSchema.class)
+public class SchemaConfig {
 
-  private Map<String, TableConfig> tables;
+  @Nullable private Map<String, TableConfig> tables;
 
   public Map<String, TableConfig> getTables() {
     return tables;
@@ -38,12 +41,13 @@ public class SchemaConfig implements Serializable {
         : java.util.Collections.emptyMap();
   }
 
-  public static class TableConfig implements Serializable {
-    private Integer insertQps;
-    private Integer updateQps;
-    private Integer deleteQps;
-    private Map<String, ColumnConfig> columns;
-    private List<ForeignKeyConfig> foreignKeys;
+  @DefaultSchema(JavaFieldSchema.class)
+  public static class TableConfig {
+    @Nullable private Integer insertQps;
+    @Nullable private Integer updateQps;
+    @Nullable private Integer deleteQps;
+    @Nullable private Map<String, ColumnConfig> columns;
+    @Nullable private List<ForeignKeyConfig> foreignKeys;
 
     public Integer getInsertQps() {
       return insertQps;
@@ -86,9 +90,10 @@ public class SchemaConfig implements Serializable {
     }
   }
 
-  public static class ColumnConfig implements Serializable {
-    private Object fakerExpression;
-    private Boolean skip;
+  @DefaultSchema(JavaFieldSchema.class)
+  public static class ColumnConfig {
+    @Nullable private Object fakerExpression;
+    @Nullable private Boolean skip;
 
     public Object getFakerExpression() {
       return fakerExpression;
@@ -107,11 +112,12 @@ public class SchemaConfig implements Serializable {
     }
   }
 
-  public static class ForeignKeyConfig implements Serializable {
-    private String name;
-    private String referencedTable;
-    private List<String> keyColumns;
-    private List<String> referencedColumns;
+  @DefaultSchema(JavaFieldSchema.class)
+  public static class ForeignKeyConfig {
+    @Nullable private String name;
+    @Nullable private String referencedTable;
+    @Nullable private List<String> keyColumns;
+    @Nullable private List<String> referencedColumns;
 
     public String getName() {
       return name;
